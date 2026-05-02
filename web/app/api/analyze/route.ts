@@ -233,6 +233,11 @@ QUALITY BAR
             ...(process.env.CLAUDE_CODE_EXECUTABLE
               ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE }
               : {}),
+            // Pipe the child's stderr to our server log so failures
+            // surface in `railway logs` instead of being eaten silently.
+            stderr: (data: string) => {
+              console.error("[claude-cli analyze]", data);
+            },
           },
         })) {
           if (canceled) break;

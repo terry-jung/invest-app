@@ -38,5 +38,10 @@ cmds = [
 # CLAUDE_CODE_EXECUTABLE points the SDK at the binary we extracted via
 # npm pack. Read by our route handlers and passed as
 # `pathToClaudeCodeExecutable` to the SDK's query() options.
+#
+# HOME=/tmp ensures Claude Code's CLI has a writable directory for its
+# `~/.claude/` config + cache files. Railway containers' default HOME
+# may not be writable depending on the user the app runs as.
 [variables]
 CLAUDE_CODE_EXECUTABLE = "/app/bin/claude-cli/claude"
+HOME = "/tmp"

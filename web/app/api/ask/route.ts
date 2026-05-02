@@ -78,6 +78,9 @@ export async function POST(req: NextRequest) {
             ...(process.env.CLAUDE_CODE_EXECUTABLE
               ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE }
               : {}),
+            stderr: (data: string) => {
+              console.error("[claude-cli ask]", data);
+            },
           },
         })) {
           if (canceled) break;
