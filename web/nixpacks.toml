@@ -1,47 +1,30 @@
 # Nixpacks build overrides for Railway.
 #
-# Default Next.js detection runs `npm ci`, which trips on a known npm bug
-# (https://github.com/npm/cli/issues/4828) when a macOS-generated
-# package-lock.json is used to install native deps on Linux x64. The
-# specific failure: @tailwindcss/oxide's Linux binary is missing because
-# npm treats the platform-specific optional deps from a foreign-arch
-# lockfile as out-of-platform and skips them — even with `npm install
-# --include=optional`, npm still respects the lockfile's platform-locked
-# entries.
+# We delete the macOS-generated package-lock.json before install so
+# npm resolves Linux-native optional deps (@tailwindcss/oxide) freshly
+# in the build container — see npm/cli#4828.
 #
-# Reliable fix: delete the lockfile inside the build container before
-# running npm install. The Linux container then resolves dependencies
-# freshly against package.json and grabs the correct native binaries.
-# The lockfile in the repo continues to serve macOS dev unchanged.
+# The Claude Code CLI now ships as @anthropic-ai/claude-code (pure JS,
+# no platform binary), so a regular npm install picks it up. We point
+# the SDK at the installed cli.js via CLAUDE_CODE_EXECUTABLE below.
 [phases.install]
 cmds = [
   "rm -f package-lock.json",
   "npm install --include=optional",
-  # Belt-and-suspenders: even with --include=optional, npm keeps silently
-  # skipping the Linux native binaries for @tailwindcss/oxide and the
-  # Claude Agent SDK on Railway (npm/cli#4828, made worse by npm's strict
-  # os/cpu constraint handling). Direct install with --no-save normally
-  # works but isn't reliable across Nixpacks build cache states.
-  #
-  # Most-deterministic fallback: `npm pack` downloads the tarball with
-  # ZERO platform-constraint enforcement, then we manually extract the
-  # `claude` binary into a stable known path. We then point the SDK at
-  # it via the CLAUDE_CODE_EXECUTABLE env var read in our route handlers.
+  # Belt-and-suspenders for the tailwind oxide native binary, which
+  # npm has historically dropped on Linux even with --include=optional.
   "npm install --no-save @tailwindcss/oxide-linux-x64-gnu@latest || true",
-  "mkdir -p /app/bin",
-  "cd /app/bin && npm pack @anthropic-ai/claude-agent-sdk-linux-x64@latest && tar xzf anthropic-ai-claude-agent-sdk-linux-x64-*.tgz && chmod +x package/claude && mv package claude-cli",
-  "echo '=== /app/bin contents ===' && ls -la /app/bin/claude-cli/ || true",
   "echo '=== node_modules/@anthropic-ai/ ===' && ls node_modules/@anthropic-ai/ || true",
-  "echo '=== node_modules/@tailwindcss/ ===' && ls node_modules/@tailwindcss/ || true",
+  "echo '=== claude-code cli ===' && ls -la node_modules/@anthropic-ai/claude-code/cli.js || true",
 ]
 
-# CLAUDE_CODE_EXECUTABLE points the SDK at the binary we extracted via
-# npm pack. Read by our route handlers and passed as
-# `pathToClaudeCodeExecutable` to the SDK's query() options.
+# Pointed at the JS entrypoint of @anthropic-ai/claude-code. The SDK's
+# query() invokes this directly via Node, so an executable bit isn't
+# strictly required — npm sets one anyway.
 #
 # HOME=/tmp ensures Claude Code's CLI has a writable directory for its
 # `~/.claude/` config + cache files. Railway containers' default HOME
 # may not be writable depending on the user the app runs as.
 [variables]
-CLAUDE_CODE_EXECUTABLE = "/app/bin/claude-cli/claude"
+CLAUDE_CODE_EXECUTABLE = "/app/node_modules/@anthropic-ai/claude-code/cli.js"
 HOME = "/tmp"
