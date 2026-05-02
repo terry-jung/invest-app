@@ -4,10 +4,17 @@
 # (https://github.com/npm/cli/issues/4828) when a macOS-generated
 # package-lock.json is used to install native deps on Linux x64. The
 # specific failure: @tailwindcss/oxide's Linux binary is missing because
-# npm ci treats the platform-specific optional deps from a foreign-arch
-# lockfile as out-of-platform and skips them.
+# npm treats the platform-specific optional deps from a foreign-arch
+# lockfile as out-of-platform and skips them — even with `npm install
+# --include=optional`, npm still respects the lockfile's platform-locked
+# entries.
 #
-# `npm install --include=optional` forces npm to re-resolve from
-# package.json (not lockfile) and grab the correct platform binaries.
+# Reliable fix: delete the lockfile inside the build container before
+# running npm install. The Linux container then resolves dependencies
+# freshly against package.json and grabs the correct native binaries.
+# The lockfile in the repo continues to serve macOS dev unchanged.
 [phases.install]
-cmds = ["npm install --include=optional"]
+cmds = [
+  "rm -f package-lock.json",
+  "npm install --include=optional",
+]
