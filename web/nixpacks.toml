@@ -1,0 +1,13 @@
+# Nixpacks build overrides for Railway.
+#
+# Default Next.js detection runs `npm ci`, which trips on a known npm bug
+# (https://github.com/npm/cli/issues/4828) when a macOS-generated
+# package-lock.json is used to install native deps on Linux x64. The
+# specific failure: @tailwindcss/oxide's Linux binary is missing because
+# npm ci treats the platform-specific optional deps from a foreign-arch
+# lockfile as out-of-platform and skips them.
+#
+# `npm install --include=optional` forces npm to re-resolve from
+# package.json (not lockfile) and grab the correct platform binaries.
+[phases.install]
+cmds = ["npm install --include=optional"]
