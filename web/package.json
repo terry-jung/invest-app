@@ -2,6 +2,9 @@
   "name": "invest-app-web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -23,5 +26,9 @@
     "@types/react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.4.5"
+  },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.0.0",
+    "@tailwindcss/oxide-linux-arm64-gnu": "^4.0.0"
   }
 }
