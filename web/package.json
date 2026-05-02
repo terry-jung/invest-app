@@ -29,6 +29,8 @@
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-linux-x64-gnu": "^4.0.0",
-    "@tailwindcss/oxide-linux-arm64-gnu": "^4.0.0"
+    "@tailwindcss/oxide-linux-arm64-gnu": "^4.0.0",
+    "@anthropic-ai/claude-agent-sdk-linux-x64": "latest",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64": "latest"
   }
 }
