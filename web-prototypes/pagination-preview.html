@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Report pagination · preview</title>
+<style>
+  :root {
+    --color-bg: #f5f5f7;
+    --color-panel: #ffffff;
+    --color-panel-2: #fafafa;
+    --color-line: #e5e5ea;
+    --color-line-2: #d2d2d7;
+    --color-ink: #1c1c1e;
+    --color-muted: #6e6e73;
+    --color-accent: #0a0a0a;
+    --color-accent-2: #1e40af;
+    --color-pos: #047857;
+    --color-neg: #b91c1c;
+    --color-amb: #ea580c;
+    --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+  main { max-width: 880px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  .case {
+    margin-bottom: 2.5rem;
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    padding: 22px 26px;
+  }
+  .case h2 {
+    font-family: var(--font-serif);
+    font-size: 1.4rem; font-weight: 500; letter-spacing: -0.005em;
+    margin: 0 0 0.25rem;
+  }
+  .case .case-sub {
+    font-size: 11.5px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    margin-bottom: 1rem;
+  }
+
+  /* status row + queue mock */
+  .status-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--color-muted);
+    margin-top: 8px;
+  }
+  .status-row .spin {
+    display: inline-block; width: 12px; text-align: center;
+    color: var(--color-accent-2); font-family: ui-monospace, monospace; font-size: 14px;
+  }
+  .status-row .ticker {
+    color: var(--color-ink); font-weight: 500;
+  }
+  .status-row .quip {
+    margin-top: 4px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    font-size: 12.5px; padding-left: 20px;
+  }
+
+  /* === PAGINATION (matches live globals.css) === */
+  .report-pagination {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 16px; padding: 6px 8px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+  .pag-arrow {
+    border: 0; background: transparent; cursor: pointer;
+    width: 28px; height: 28px;
+    border-radius: 5px;
+    color: var(--color-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 16px; line-height: 1;
+    flex-shrink: 0;
+    transition: background 0.12s, color 0.12s;
+  }
+  .pag-arrow:hover:not(:disabled) {
+    background: var(--color-panel-2);
+    color: var(--color-ink);
+  }
+  .pag-arrow:disabled {
+    opacity: 0.3; cursor: not-allowed;
+  }
+  .pag-tabs {
+    display: flex; gap: 4px; flex: 1;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .pag-tab {
+    font: inherit; font-size: 12px; font-weight: 500;
+    padding: 6px 12px; border-radius: 5px;
+    background: transparent; border: 1px solid transparent;
+    color: var(--color-muted); cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-variant-numeric: tabular-nums;
+    transition: background 0.12s, color 0.12s;
+  }
+  .pag-tab:hover:not(.active) {
+    background: var(--color-panel-2);
+    color: var(--color-ink);
+  }
+  .pag-tab.active {
+    background: var(--color-accent);
+    color: #fff;
+  }
+  .pag-tab .pag-num {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+  }
+  .pag-tab.live {
+    color: var(--color-accent-2);
+  }
+  .pag-tab.live::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--color-accent-2);
+    display: inline-block;
+    animation: pag-pulse 1.4s ease-in-out infinite;
+  }
+  .pag-tab.live.active {
+    background: var(--color-accent-2);
+    color: #fff;
+  }
+  .pag-tab.live.active::before {
+    background: #fff;
+  }
+  @keyframes pag-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  /* mocked verdict banner + report stub */
+  .banner-stub {
+    margin-top: 18px;
+    border: 1px solid var(--color-line);
+    background: var(--color-panel);
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .banner-stub .company {
+    font-family: var(--font-serif); font-size: 2.125rem; font-weight: 500;
+    line-height: 1.1; letter-spacing: -0.01em;
+  }
+  .banner-stub .pill-row { margin-top: 12px; }
+  .banner-stub .pill {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px;
+  }
+  .banner-stub .pill.buy   { background: rgba(4,120,87,0.08);  color: var(--color-pos); border: 1px solid var(--color-pos); }
+  .banner-stub .pill.hold  { background: rgba(30,64,175,0.06); color: var(--color-accent-2); border: 1px solid var(--color-accent-2); }
+  .banner-stub .pill.trim  { background: rgba(234,88,12,0.08); color: var(--color-amb); border: 1px solid var(--color-amb); }
+  .banner-stub .pill.expand { background: rgba(4,120,87,0.08);  color: var(--color-pos); border: 1px solid var(--color-pos); }
+  .banner-stub .meta {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--color-muted); font-weight: 600; margin-top: 14px;
+  }
+  .banner-stub .body-stub {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-line);
+    color: var(--color-muted);
+    font-style: italic;
+    font-family: var(--font-serif);
+    font-size: 13px;
+  }
+
+  .header-note {
+    margin-bottom: 2rem;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(30,64,175,0.06);
+    border: 1px solid rgba(30,64,175,0.20);
+    font-size: 12.5px;
+    color: var(--color-accent-2);
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .header-note b { font-weight: 700; font-style: normal; }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="header-note">
+    <b>Preview only — no API calls.</b> Three states of the new pagination model. Click any tab in the controls to see how the banner + report stub swap. Currently-active tab is filled black; pulsing blue is the running run.
+  </div>
+
+  <!-- ========== Case 1: 3 completed pages, no live run ========== -->
+  <div class="case">
+    <h2>Case 1 · Three completed analyses, viewing the second</h2>
+    <p class="case-sub">User finished LMT, VRT, NVDA in sequence. They navigated back to VRT (page 2). The first time they finished an analysis they were auto-switched to it; subsequent completions stayed where they were.</p>
+
+    <div class="report-pagination">
+      <button class="pag-arrow" data-action="prev" data-case="c1">←</button>
+      <div class="pag-tabs">
+        <button class="pag-tab" data-case="c1" data-idx="0"><span class="pag-num">1.</span>LMT</button>
+        <button class="pag-tab active" data-case="c1" data-idx="1"><span class="pag-num">2.</span>VRT</button>
+        <button class="pag-tab" data-case="c1" data-idx="2"><span class="pag-num">3.</span>NVDA</button>
+      </div>
+      <button class="pag-arrow" data-action="next" data-case="c1">→</button>
+    </div>
+
+    <div class="banner-stub" id="c1-banner">
+      <div class="company">Vertiv Holdings Co</div>
+      <div class="pill-row"><span class="pill buy">BUY · with discipline</span></div>
+      <div class="meta">NYSE: VRT · Investment Analysis · 36-Month Horizon</div>
+      <div class="body-stub">…full VRT report would render below…</div>
+    </div>
+  </div>
+
+  <!-- ========== Case 2: 2 completed pages + live ========== -->
+  <div class="case">
+    <h2>Case 2 · Two completed, third currently streaming</h2>
+    <p class="case-sub">LMT and VRT are done; NVDA is being researched right now. User is on page 1 (LMT) reading. They can click <i>NVDA</i> tab to jump to the live stream.</p>
+
+    <div class="status-row">
+      <span class="spin">⠹</span>
+      <span class="ticker">NVDA</span>
+      <span>Researching… · 18s</span>
+    </div>
+    <div class="status-row" style="margin-top: 0;">
+      <span class="quip">Probing the moat for soft spots…</span>
+    </div>
+
+    <div class="report-pagination">
+      <button class="pag-arrow" data-action="prev" data-case="c2">←</button>
+      <div class="pag-tabs">
+        <button class="pag-tab active" data-case="c2" data-idx="0"><span class="pag-num">1.</span>LMT</button>
+        <button class="pag-tab" data-case="c2" data-idx="1"><span class="pag-num">2.</span>VRT</button>
+        <button class="pag-tab live" data-case="c2" data-idx="-1">NVDA</button>
+      </div>
+      <button class="pag-arrow" data-action="next" data-case="c2">→</button>
+    </div>
+
+    <div class="banner-stub" id="c2-banner">
+      <div class="company">Lockheed Martin Corporation</div>
+      <div class="pill-row"><span class="pill hold">HOLD</span></div>
+      <div class="meta">NYSE: LMT · Investment Analysis · 36-Month Horizon</div>
+      <div class="body-stub">…full LMT report would render below…</div>
+    </div>
+  </div>
+
+  <!-- ========== Case 3: First-time run, only live ========== -->
+  <div class="case">
+    <h2>Case 3 · First-ever run, currently streaming</h2>
+    <p class="case-sub">Nothing finished yet. Only the live tab exists. Once it completes the user is auto-advanced to view it as page 1.</p>
+
+    <div class="status-row">
+      <span class="spin">⠼</span>
+      <span class="ticker">LLY</span>
+      <span>Connecting… · 3s</span>
+    </div>
+
+    <div class="report-pagination">
+      <button class="pag-arrow" disabled>←</button>
+      <div class="pag-tabs">
+        <button class="pag-tab live active">LLY</button>
+      </div>
+      <button class="pag-arrow" disabled>→</button>
+    </div>
+
+    <div class="banner-stub" style="opacity: 0.6;">
+      <div style="font-family: var(--font-serif); color: var(--color-muted); font-style: italic; font-size: 14.5px;">Streaming will appear here as soon as the first content arrives…</div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// Mock data per case so clicking tabs swaps banner content
+const MOCK = {
+  c1: [
+    { co: "Lockheed Martin Corporation", verdict: "HOLD",          pill: "hold",   meta: "NYSE: LMT · Investment Analysis · 36-Month Horizon" },
+    { co: "Vertiv Holdings Co",          verdict: "BUY · with discipline", pill: "buy", meta: "NYSE: VRT · Investment Analysis · 36-Month Horizon" },
+    { co: "NVIDIA Corporation",          verdict: "EXPAND",        pill: "expand", meta: "NASDAQ: NVDA · Investment Analysis · 36-Month Horizon" },
+  ],
+  c2: [
+    { co: "Lockheed Martin Corporation", verdict: "HOLD",          pill: "hold",   meta: "NYSE: LMT · Investment Analysis · 36-Month Horizon" },
+    { co: "Vertiv Holdings Co",          verdict: "BUY · with discipline", pill: "buy", meta: "NYSE: VRT · Investment Analysis · 36-Month Horizon" },
+    { co: "NVIDIA Corporation (live)",   verdict: "—",             pill: "hold",   meta: "NASDAQ: NVDA · streaming…", live: true },
+  ],
+};
+
+function paint(caseId, idx) {
+  const items = MOCK[caseId];
+  const item = idx === -1 ? items[items.length - 1] : items[idx];
+  const banner = document.getElementById(`${caseId}-banner`);
+  if (!banner || !item) return;
+  banner.innerHTML = item.live
+    ? `<div style="font-family: var(--font-serif); color: var(--color-muted); font-style: italic; font-size: 14.5px;">Live stream for ${item.co.replace(' (live)', '')} would render here as deltas arrive…</div>`
+    : `<div class="company">${item.co}</div>
+       <div class="pill-row"><span class="pill ${item.pill}">${item.verdict}</span></div>
+       <div class="meta">${item.meta}</div>
+       <div class="body-stub">…full report content for ${item.co} would render below…</div>`;
+}
+
+// Wire up clicks
+document.querySelectorAll('.pag-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const caseId = btn.dataset.case;
+    if (!caseId) return;
+    document.querySelectorAll(`.pag-tab[data-case="${caseId}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const idx = parseInt(btn.dataset.idx ?? "0", 10);
+    paint(caseId, idx);
+  });
+});
+document.querySelectorAll('.pag-arrow').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const caseId = btn.dataset.case;
+    if (!caseId) return;
+    const tabs = Array.from(document.querySelectorAll(`.pag-tab[data-case="${caseId}"]`));
+    const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
+    let nextIdx = activeIdx;
+    if (btn.dataset.action === 'prev') nextIdx = Math.max(0, activeIdx - 1);
+    if (btn.dataset.action === 'next') nextIdx = Math.min(tabs.length - 1, activeIdx + 1);
+    if (nextIdx !== activeIdx) tabs[nextIdx].click();
+  });
+});
+</script>
+</body>
+</html>

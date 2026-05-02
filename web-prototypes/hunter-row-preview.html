@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hunter row redesign · preview</title>
+<style>
+  :root {
+    --color-bg: #f5f5f7;
+    --color-panel: #ffffff;
+    --color-panel-2: #fafafa;
+    --color-line: #e5e5ea;
+    --color-line-2: #d2d2d7;
+    --color-ink: #1c1c1e;
+    --color-muted: #6e6e73;
+    --color-accent: #0a0a0a;
+    --color-accent-2: #1e40af;
+    --color-pos: #047857;
+    --color-neg: #b91c1c;
+    --color-amb: #ea580c;
+    --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+  main { max-width: 448px; margin: 0 auto; padding: 2rem 1rem; }
+
+  /* Hunter results panel */
+  .hunter-results {
+    border: 1px solid var(--color-line);
+    background: var(--color-panel);
+    border-radius: 12px;
+    padding: 18px 18px 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    position: relative;
+  }
+  .hunter-close {
+    position: absolute; top: 10px; right: 10px;
+    width: 28px; height: 28px;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--color-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; font-size: 18px; line-height: 1;
+  }
+  .hunter-results .head { margin-bottom: 12px; padding-right: 24px; }
+  .hunter-results .title {
+    font-family: var(--font-serif);
+    font-size: 1.25rem; font-weight: 500; letter-spacing: -0.005em;
+  }
+  .hunter-results .source {
+    font-size: 11px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    margin-top: 2px;
+  }
+
+  /* === REDESIGNED HUNTER CARD === */
+  .hunter-card {
+    border: 1px solid var(--color-line);
+    background: var(--color-panel-2);
+    border-radius: 10px;
+    padding: 14px 14px 12px;
+    margin-top: 14px;
+  }
+  .hunter-card:first-of-type { margin-top: 0; }
+
+  /* Header row: rank | ticker + exchange | (right side empty / could hold rank) */
+  .hc-head {
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .hc-rank {
+    font-family: var(--font-serif);
+    font-size: 1.1rem; font-weight: 500;
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 22px;
+  }
+  .hc-id {
+    display: flex; align-items: baseline; gap: 8px;
+    flex-wrap: wrap; flex: 1;
+  }
+  .hc-sym {
+    font-family: var(--font-serif);
+    font-size: 1.5rem; font-weight: 500;
+    letter-spacing: -0.005em;
+    color: var(--color-ink); line-height: 1.1;
+  }
+  .hc-exch {
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--color-muted); font-weight: 600;
+    background: var(--color-panel); padding: 3px 7px; border-radius: 4px;
+    border: 1px solid var(--color-line);
+    line-height: 1;
+  }
+  .hc-name {
+    font-size: 13px; color: var(--color-ink);
+    margin-top: 4px; margin-left: 32px;
+    line-height: 1.35;
+  }
+
+  .hc-divider {
+    height: 1px; background: var(--color-line);
+    margin: 12px 0;
+  }
+
+  .hc-rationale {
+    font-family: var(--font-serif);
+    font-size: 14.5px; line-height: 1.55;
+    color: var(--color-ink);
+  }
+
+  .hc-actions {
+    display: flex; gap: 8px; margin-top: 0;
+  }
+  .hc-btn {
+    flex: 1;
+    border: 1px solid var(--color-line-2);
+    background: #fff; color: var(--color-ink);
+    font: inherit; font-size: 12.5px; font-weight: 500;
+    padding: 9px 10px; border-radius: 6px;
+    cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center;
+    justify-content: center; gap: 6px;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .hc-btn-run {
+    background: var(--color-accent); color: #fff;
+    border-color: var(--color-accent);
+  }
+  .hc-btn-run:hover {
+    background: var(--color-accent-2); border-color: var(--color-accent-2);
+  }
+  .hc-btn-save { color: var(--color-muted); }
+  .hc-btn-save:hover { color: var(--color-accent-2); border-color: var(--color-accent-2); }
+  .hc-btn-save[data-starred="true"] {
+    color: var(--color-accent-2); border-color: var(--color-accent-2);
+    background: rgba(30,64,175,0.04);
+  }
+  .hc-btn-save svg { width: 13px; height: 13px; }
+  .hc-btn-save[data-starred="true"] svg { fill: var(--color-accent-2); stroke: var(--color-accent-2); }
+  .hc-btn-save[data-starred="false"] svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+  .header-note {
+    margin-bottom: 1.5rem;
+    padding: 10px 14px; border-radius: 8px;
+    background: rgba(30,64,175,0.06);
+    border: 1px solid rgba(30,64,175,0.20);
+    font-size: 12px; color: var(--color-accent-2);
+    font-family: var(--font-serif); font-style: italic;
+  }
+  .header-note b { font-weight: 700; font-style: normal; }
+</style>
+</head>
+<body>
+<main>
+
+  <p class="header-note">
+    <b>Preview only.</b> New hunter card layout: ticker + exchange + name as a header at the top, divider, then the rationale, divider, then the two CTAs side-by-side at the bottom. Rank stays as a small serif numeral on the left edge.
+  </p>
+
+  <div class="hunter-results">
+    <button class="hunter-close" aria-label="Clear">×</button>
+    <div class="head">
+      <div class="title">Hunter ranked these 3 ideas</div>
+      <div class="source">Most recommended first · click <b>Run analysis</b> to deep-dive any of them</div>
+    </div>
+
+    <!-- Card 1 -->
+    <div class="hunter-card">
+      <div class="hc-head">
+        <div class="hc-rank">1</div>
+        <div class="hc-id">
+          <span class="hc-sym">LLY</span>
+          <span class="hc-exch">NYSE</span>
+        </div>
+      </div>
+      <div class="hc-name">Eli Lilly and Company</div>
+      <div class="hc-divider"></div>
+      <div class="hc-rationale">GLP-1 obesity TAM expansion is inevitable through 2027–2028 with oral orforglipron Phase 3 readouts and Mounjaro/Zepbound supply normalizing; Lilly already prints the numbers and owns manufacturing capacity rivals can't match.</div>
+      <div class="hc-divider"></div>
+      <div class="hc-actions">
+        <button class="hc-btn hc-btn-run">Run Analysis →</button>
+        <button class="hc-btn hc-btn-save" data-starred="false">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Save Ticker
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 2 -->
+    <div class="hunter-card">
+      <div class="hc-head">
+        <div class="hc-rank">2</div>
+        <div class="hc-id">
+          <span class="hc-sym">NVDA</span>
+          <span class="hc-exch">NASDAQ</span>
+        </div>
+      </div>
+      <div class="hc-name">NVIDIA Corporation</div>
+      <div class="hc-divider"></div>
+      <div class="hc-rationale">AI compute demand is bipartisan and bipolar — every hyperscaler, sovereign, and enterprise capex plan through 2028 routes through Blackwell/Rubin GPUs regardless of US administration or China policy outcome.</div>
+      <div class="hc-divider"></div>
+      <div class="hc-actions">
+        <button class="hc-btn hc-btn-run">Run Analysis →</button>
+        <button class="hc-btn hc-btn-save" data-starred="true">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Saved
+        </button>
+      </div>
+    </div>
+
+    <!-- Card 3 -->
+    <div class="hunter-card">
+      <div class="hc-head">
+        <div class="hc-rank">3</div>
+        <div class="hc-id">
+          <span class="hc-sym">TSM</span>
+          <span class="hc-exch">NYSE</span>
+        </div>
+      </div>
+      <div class="hc-name">Taiwan Semiconductor Manufacturing Company Limited</div>
+      <div class="hc-divider"></div>
+      <div class="hc-rationale">Leading-edge silicon (3nm/2nm) is a true monopoly; whether reshoring accelerates or Taiwan status quo holds, TSMC captures the wafer regardless via Arizona/Japan fabs plus Hsinchu.</div>
+      <div class="hc-divider"></div>
+      <div class="hc-actions">
+        <button class="hc-btn hc-btn-run">Run Analysis →</button>
+        <button class="hc-btn hc-btn-save" data-starred="false">
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Save Ticker
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+</body>
+</html>

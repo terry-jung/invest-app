@@ -1,0 +1,29 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local env (contains ANTHROPIC_API_KEY)
+.env
+.env.local
+.env*.local
+
+# Local saved analyses — personal data, never commit
+output/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
+
+# Vercel artifacts (we're moving off but tolerate the directory)
+.vercel/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

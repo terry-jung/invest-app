@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gauge preview · larger fonts + "today" label</title>
+<style>
+  :root {
+    --color-bg: #f5f5f7;
+    --color-panel: #ffffff;
+    --color-panel-2: #fafafa;
+    --color-line: #e5e5ea;
+    --color-line-2: #d2d2d7;
+    --color-ink: #1c1c1e;
+    --color-muted: #6e6e73;
+    --color-accent: #0a0a0a;
+    --color-accent-2: #1e40af;
+    --color-pos: #047857;
+    --color-neg: #b91c1c;
+    --color-amb: #ea580c;
+    --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+  main { max-width: 880px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  .case {
+    margin-bottom: 2.5rem;
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    padding: 24px 28px;
+  }
+  .case h2 {
+    font-family: var(--font-serif);
+    font-size: 1.4rem; font-weight: 500; letter-spacing: -0.005em;
+    margin: 0 0 0.25rem;
+  }
+  .case .case-sub {
+    font-size: 11.5px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    margin-bottom: 0.5rem;
+  }
+
+  /* === GAUGE STYLES (mirrors live globals.css) === */
+  .verdict-gauge {
+    margin-top: 22px;
+    padding: 0 12px;
+  }
+  .gauge-labels {
+    position: relative;
+    height: 50px;
+  }
+  .gauge-label {
+    position: absolute;
+    transform: translateX(-50%);
+    text-align: center;
+    white-space: nowrap;
+  }
+  .gauge-label .lbl {
+    font-size: 12px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .gauge-label .val {
+    font-family: var(--font-serif);
+    font-size: 17px;
+    color: var(--color-muted);
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  /* Subtle connector line from each label down to the bar — anchors the
+     thresholds visually so the labels don't read as floating text. */
+  .gauge-label::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 4px);
+    width: 1px;
+    height: 32px;
+    background: var(--color-line-2);
+    transform: translateX(-0.5px);
+  }
+  .gauge-arrow-row {
+    position: relative;
+    height: 28px;
+  }
+  .gauge-arrow {
+    position: absolute;
+    bottom: 0;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+  }
+  .gauge-arrow-label {
+    font-family: var(--font-serif);
+    font-size: 12px;
+    font-style: italic;
+    color: var(--color-muted);
+    font-weight: 500;
+    line-height: 1;
+  }
+  .gauge-arrow-tri {
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--color-accent-2);
+  }
+  .gauge-bar {
+    position: relative;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--color-line);
+  }
+  .gauge-zone {
+    position: absolute;
+    top: 0; bottom: 0;
+  }
+  .gauge-zone.zone-green  { background: rgba(4,120,87,0.20); }
+  .gauge-zone.zone-yellow { background: rgba(234,179,8,0.20); }
+  .gauge-zone.zone-red    { background: rgba(185,28,28,0.18); }
+  .gauge-tick {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 1px;
+    background: var(--color-line-2);
+  }
+  .gauge-price-row {
+    position: relative;
+    height: 28px;
+    margin-top: 10px;
+  }
+  .gauge-price {
+    position: absolute;
+    transform: translateX(-50%);
+    font-family: var(--font-serif);
+    color: var(--color-accent-2);
+    font-weight: 600;
+    font-size: 19px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .header-note {
+    margin-bottom: 2rem;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(30,64,175,0.06);
+    border: 1px solid rgba(30,64,175,0.20);
+    font-size: 12.5px;
+    color: var(--color-accent-2);
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .header-note b { font-weight: 700; font-style: normal; }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="header-note">
+    <b>Preview only — no API calls.</b> Both the larger label fonts and the new <i>today</i> caption above the arrow are shown across three buy-zone shapes so you can see how it scales.
+  </div>
+
+  <!-- Case 1: matches the screenshot you posted -->
+  <div class="case">
+    <h2>Case A · Buy / Hold / Trim band</h2>
+    <p class="case-sub">FULL &lt;$72  ·  BUY &lt;$80  ·  TRIM &gt;$105  ·  current $94</p>
+    <div id="gauge-a"></div>
+  </div>
+
+  <!-- Case 2: tighter range (small-cap example) -->
+  <div class="case">
+    <h2>Case B · Tight $ band, current price near BUY threshold</h2>
+    <p class="case-sub">FULL &lt;$15.50  ·  BUY &lt;$17.00  ·  TRIM &gt;$22.50  ·  current $17.20</p>
+    <div id="gauge-b"></div>
+  </div>
+
+  <!-- Case 3: wide range (mega-cap example, like LLY) -->
+  <div class="case">
+    <h2>Case C · Wide $ band, current below FULL</h2>
+    <p class="case-sub">FULL &lt;$800  ·  BUY &lt;$870  ·  TRIM &gt;$1,200  ·  current $760</p>
+    <div id="gauge-c"></div>
+  </div>
+
+</main>
+
+<script>
+/** Threshold prices: clean integer dollars (or K/M for large numbers). */
+function fmtThreshold(n) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000)    return `$${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1_000)     return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  return `$${Math.round(n).toLocaleString('en-US')}`;
+}
+/** Current price: cents for sub-$1,000 to show real precision; rounded above. */
+function fmtPrice(n) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000)    return `$${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1_000)     return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function renderGauge(id, t) {
+  const lo = Math.min(t.full, t.buy, t.trim);
+  const hi = Math.max(t.full, t.buy, t.trim);
+  const range = hi - lo;
+  const pad = Math.max(range * 0.15, 1);
+  const minBound = t.price != null ? Math.min(lo - pad, t.price - pad * 0.4) : lo - pad;
+  const maxBound = t.price != null ? Math.max(hi + pad, t.price + pad * 0.4) : hi + pad;
+  const span = maxBound - minBound || 1;
+  const pct = (v) => Math.max(0, Math.min(100, ((v - minBound) / span) * 100));
+
+  const fullPct = pct(t.full), buyPct = pct(t.buy), trimPct = pct(t.trim);
+  const pricePct = t.price != null ? pct(t.price) : null;
+  const lowPct = Math.min(fullPct, trimPct);
+  const highPct = Math.max(fullPct, trimPct);
+
+  const root = document.getElementById(id);
+  root.innerHTML = `
+    <div class="verdict-gauge">
+      <div class="gauge-labels">
+        <div class="gauge-label" style="left:${fullPct}%">
+          <div class="lbl">Full</div><div class="val">&lt;${fmtThreshold(t.full)}</div>
+        </div>
+        <div class="gauge-label" style="left:${buyPct}%">
+          <div class="lbl">Buy</div><div class="val">&lt;${fmtThreshold(t.buy)}</div>
+        </div>
+        <div class="gauge-label" style="left:${trimPct}%">
+          <div class="lbl">Trim</div><div class="val">&gt;${fmtThreshold(t.trim)}</div>
+        </div>
+      </div>
+      <div class="gauge-arrow-row">
+        ${pricePct !== null ? `
+          <div class="gauge-arrow" style="left:${pricePct}%">
+            <span class="gauge-arrow-label">today</span>
+            <span class="gauge-arrow-tri"></span>
+          </div>` : ''}
+      </div>
+      <div class="gauge-bar">
+        <div class="gauge-zone zone-green"  style="left:0;width:${lowPct}%"></div>
+        <div class="gauge-zone zone-yellow" style="left:${lowPct}%;width:${highPct - lowPct}%"></div>
+        <div class="gauge-zone zone-red"    style="left:${highPct}%;width:${100 - highPct}%"></div>
+        <div class="gauge-tick" style="left:${fullPct}%"></div>
+        <div class="gauge-tick" style="left:${trimPct}%"></div>
+      </div>
+      <div class="gauge-price-row">
+        ${pricePct !== null ? `<div class="gauge-price" style="left:${pricePct}%">${fmtPrice(t.price)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+renderGauge('gauge-a', { full: 72,  buy: 80,   trim: 105,   price: 94    });
+renderGauge('gauge-b', { full: 15.5, buy: 17,   trim: 22.5, price: 17.20 });
+renderGauge('gauge-c', { full: 800, buy: 870,  trim: 1200, price: 760   });
+</script>
+</body>
+</html>

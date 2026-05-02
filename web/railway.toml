@@ -1,0 +1,20 @@
+# Railway service config.
+#
+# Build: Nixpacks auto-detects Next.js → runs `npm install` + `npm run build`.
+# Deploy: starts a long-lived Node process via `npm start` (which runs
+# `next start` and listens on $PORT). Healthcheck hits `/` to gate the
+# new revision behind a real OK from the renderer.
+#
+# Persistent storage: a 1GB volume is mounted at /data. The Save flow
+# resolves SAVED_ANALYSES_DIR=/data/saved-analyses (set as a Railway env
+# var) so files survive deploys/restarts.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

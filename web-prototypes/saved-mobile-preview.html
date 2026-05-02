@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Saved tab + tab rename · mobile preview</title>
+<style>
+  :root {
+    --color-bg: #f5f5f7;
+    --color-panel: #ffffff;
+    --color-panel-2: #fafafa;
+    --color-line: #e5e5ea;
+    --color-line-2: #d2d2d7;
+    --color-ink: #1c1c1e;
+    --color-muted: #6e6e73;
+    --color-accent: #0a0a0a;
+    --color-accent-2: #1e40af;
+    --color-pos: #047857;
+    --color-neg: #b91c1c;
+    --color-amb: #ea580c;
+    --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+  main { max-width: 448px; margin: 0 auto; padding: 1.5rem 1rem 6rem; }
+
+  header { padding-bottom: 14px; border-bottom: 1px solid var(--color-line-2); margin-bottom: 16px; }
+  header h1 {
+    font-family: var(--font-serif); font-size: 1.5rem; font-weight: 500;
+    margin: 0; letter-spacing: -0.005em;
+  }
+
+  /* ---- Section heading ---- */
+  .saved-head { margin-top: 1.25rem; margin-bottom: 1rem; }
+  .saved-head h2 {
+    font-family: var(--font-serif); font-size: 1.5rem; font-weight: 500; margin: 0;
+  }
+  .saved-head .count { font-size: 12px; color: var(--color-muted); margin-top: 4px; }
+  .saved-head .count b { color: var(--color-ink); font-weight: 600; }
+  .saved-head .head-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
+  }
+  .saved-head .collapse-btn {
+    border: 1px solid var(--color-line); background: transparent;
+    color: var(--color-muted); font: inherit; font-size: 11px; font-weight: 500;
+    padding: 5px 9px; border-radius: 5px; cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* ---- Bookmark / star button ---- */
+  .star-btn {
+    width: 28px; height: 28px; border-radius: 5px;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--color-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .star-btn[data-starred="true"] { color: var(--color-accent-2); }
+  .star-btn svg { width: 16px; height: 16px; }
+  .star-btn[data-starred="true"] svg { fill: var(--color-accent-2); stroke: var(--color-accent-2); }
+  .star-btn[data-starred="false"] svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+  .ticker-head .star-btn { width: 26px; height: 26px; }
+  .ticker-head .star-btn svg { width: 15px; height: 15px; }
+
+  /* ---- TICKER GROUP ---- */
+  .ticker-group { margin-bottom: 8px; }
+
+  .ticker-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 8px; border-radius: 8px;
+    flex-wrap: wrap; cursor: pointer;
+  }
+  .ticker-head:hover { background: var(--color-panel); }
+
+  .sym-block {
+    display: flex; flex-direction: column; min-width: 0;
+    flex: 1 1 0; line-height: 1.2;
+  }
+  .sym-block .sym {
+    font-family: var(--font-serif); font-size: 1.25rem; font-weight: 500;
+    color: var(--color-ink); letter-spacing: -0.005em;
+  }
+  .sym-block .name {
+    font-size: 11.5px; color: var(--color-muted);
+    margin-top: 2px; line-height: 1.3; word-break: break-word;
+  }
+
+  .ticker-head .toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--color-muted);
+    font-variant-numeric: tabular-nums; flex-shrink: 0;
+  }
+  .ticker-head .chev {
+    width: 16px; height: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--color-muted); transition: transform 0.18s ease;
+  }
+  .ticker-group[data-open="true"] .chev { transform: rotate(90deg); color: var(--color-accent-2); }
+
+  /* Trash button on ticker header */
+  .ticker-head .icon-btn {
+    width: 26px; height: 26px; border-radius: 5px;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--color-muted); opacity: 0.6;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ticker-head .icon-btn:hover { opacity: 1; color: var(--color-neg); background: rgba(185,28,28,0.06); }
+  .ticker-head .icon-btn svg { width: 14px; height: 14px; }
+
+  /* Starred-only state */
+  .ticker-group.starred-only .starred-only-action {
+    flex-basis: 100%;
+    font-size: 11.5px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    margin-left: 34px; margin-top: 4px;
+  }
+  .ticker-group.starred-only .starred-only-action a {
+    color: var(--color-accent-2); text-decoration: underline; cursor: pointer;
+  }
+  .ticker-group.starred-only .ticker-head { cursor: default; }
+  .ticker-group.starred-only .ticker-head:hover { background: transparent; }
+  .ticker-group.starred-only .chev,
+  .ticker-group.starred-only .toggle .count { display: none; }
+
+  .ticker-list {
+    display: none;
+    border-top: 1px solid var(--color-line);
+    margin: 4px 8px 0;
+    padding-top: 4px;
+  }
+  .ticker-group[data-open="true"] .ticker-list { display: block; }
+
+  /* === SAVED ROW (REDESIGNED per user spec) ===
+     Left column (3 stacked rows):
+       row 1: date + relative time
+       row 2: verdict pill
+       row 3: qualifier (italic, optional)
+     Right column (3 stacked rows, all right-aligned):
+       row 1: saved at $X
+       row 2: now $Y
+       row 3: trash icon (larger, more visible)
+  */
+  .saved-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 16px;
+    row-gap: 6px;
+    padding: 12px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .saved-row:hover { background: var(--color-panel); }
+  .saved-row + .saved-row { border-top: 1px solid var(--color-line); }
+
+  /* Left column items */
+  .saved-row .when {
+    grid-column: 1; grid-row: 1;
+    font-family: var(--font-serif); font-size: 14px;
+    color: var(--color-ink); line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+  }
+  .saved-row .when small {
+    display: block; font-size: 10.5px; color: var(--color-muted);
+    font-family: var(--font-sans); margin-top: 1px; letter-spacing: 0.02em;
+  }
+  .saved-row .verdict-cell {
+    grid-column: 1; grid-row: 2;
+    display: flex; align-items: center;
+  }
+  .saved-row .qualifier {
+    grid-column: 1; grid-row: 3;
+    font-size: 11.5px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    line-height: 1.3;
+    align-self: center;
+  }
+  .saved-row .pill {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 5px 12px; border-radius: 999px;
+  }
+  .saved-row .pill.buy, .saved-row .pill.expand {
+    background: rgba(4,120,87,0.08); color: var(--color-pos); border: 1px solid var(--color-pos);
+  }
+  .saved-row .pill.hold {
+    background: rgba(30,64,175,0.06); color: var(--color-accent-2); border: 1px solid var(--color-accent-2);
+  }
+  .saved-row .pill.reduce, .saved-row .pill.trim {
+    background: rgba(234,88,12,0.08); color: var(--color-amb); border: 1px solid var(--color-amb);
+  }
+
+  /* Right column — stacked block of prices (rows 1+2 combined so they sit close) */
+  .saved-row .px-stack {
+    grid-column: 2; grid-row: 1 / span 2;
+    display: flex; flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    align-self: start;
+  }
+  .saved-row .saved-at,
+  .saved-row .now-line {
+    font-family: var(--font-serif); font-size: 13px;
+    color: var(--color-muted); text-align: right;
+    font-variant-numeric: tabular-nums; line-height: 1.3;
+  }
+  .saved-row .saved-at b,
+  .saved-row .now-line b { color: var(--color-ink); font-weight: 600; }
+
+  /* Right column — trash icon, no card background */
+  .saved-row .row-trash {
+    grid-column: 2; grid-row: 3;
+    justify-self: end;
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-muted);
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: color 0.15s, background 0.15s;
+  }
+  .saved-row .row-trash:hover {
+    color: var(--color-neg);
+    background: rgba(185,28,28,0.06);
+  }
+  .saved-row .row-trash svg { width: 18px; height: 18px; }
+
+  .header-note {
+    margin-bottom: 1.25rem;
+    padding: 10px 14px; border-radius: 8px;
+    background: rgba(30,64,175,0.06); border: 1px solid rgba(30,64,175,0.20);
+    font-size: 12px; color: var(--color-accent-2);
+    font-family: var(--font-serif); font-style: italic;
+  }
+  .header-note b { font-weight: 700; font-style: normal; }
+
+  /* === BOTTOM NAV (preview-style with new labels) === */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+    background: var(--color-panel);
+    border-top: 1px solid var(--color-line);
+    display: flex; justify-content: space-around;
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+  }
+  .nav-tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 4px;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--color-muted);
+    font-family: var(--font-sans);
+    font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em;
+  }
+  .nav-tab[aria-current="true"] { color: var(--color-accent); }
+  .nav-tab svg { width: 22px; height: 22px; stroke-width: 1.6; }
+  .nav-tab[aria-current="true"] svg { stroke-width: 2; }
+
+  /* === BRAINSTORM section preview === */
+  .brainstorm-section { margin-top: 1.5rem; }
+  .brainstorm-section h2 {
+    font-family: var(--font-serif); font-size: 1.5rem; font-weight: 500; margin: 0;
+  }
+  .brainstorm-section p {
+    font-size: 12.5px; color: var(--color-muted); margin: 4px 0 12px;
+  }
+  .hunter-results {
+    border: 1px solid var(--color-line);
+    background: var(--color-panel);
+    border-radius: 12px;
+    padding: 16px 16px 4px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    position: relative;
+  }
+  .hunter-results .head { margin-bottom: 12px; padding-right: 24px; }
+  .hunter-results .title {
+    font-family: var(--font-serif);
+    font-size: 1.2rem; font-weight: 500;
+  }
+  .hunter-results .source {
+    font-size: 11px; color: var(--color-muted);
+    font-style: italic; font-family: var(--font-serif);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>AI Investment Co-Pilot</h1>
+  </header>
+
+  <p class="header-note">
+    <b>Preview only.</b> Shows the new Saved row layout (per your spec), the new tab labels (Brainstorm / Analyze / Saved), and the renamed Brainstorm copy. Scroll to the bottom of the page to see the new bottom-nav labels.
+  </p>
+
+  <!-- ============== BRAINSTORM COPY PREVIEW ============== -->
+  <div class="brainstorm-section">
+    <h2>Brainstorm for Ideas</h2>
+    <p>Describe what you're looking for. Co-pilot returns 10 ranked picks with rationale.</p>
+  </div>
+
+  <div class="hunter-results">
+    <div class="head">
+      <div class="title">Co-pilot ranked these 10 ideas</div>
+      <div class="source">Most recommended first · click <b>Run Analysis</b> to deep-dive any of them</div>
+    </div>
+    <div style="font-size: 12.5px; color: var(--color-muted); font-style: italic; font-family: var(--font-serif); padding: 12px 0 16px;">
+      … 10 ranked tickers would render here, exactly like the current Brainstorm tab …
+    </div>
+  </div>
+
+  <!-- ============== SAVED TAB REDESIGN ============== -->
+  <div class="saved-head">
+    <div class="head-row">
+      <div>
+        <h2>Saved</h2>
+        <p class="count"><b>4</b> tickers · <b>1</b> analysis · newest first</p>
+      </div>
+      <button class="collapse-btn">Collapse all</button>
+    </div>
+  </div>
+
+  <!-- TSM with 1 saved analysis, expanded — shows the redesigned saved row -->
+  <div class="ticker-group" data-open="true" data-ticker="TSM">
+    <div class="ticker-head">
+      <button class="star-btn" data-starred="false" aria-label="Toggle save">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <div class="sym-block">
+        <span class="sym">TSM</span>
+        <span class="name">Taiwan Semiconductor Manufacturing Company Limited</span>
+      </div>
+      <span class="toggle">
+        <button class="icon-btn" title="Delete all saved for TSM" aria-label="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+        <span class="count">1</span>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
+      </span>
+    </div>
+    <div class="ticker-list">
+
+      <!-- The redesigned saved row -->
+      <div class="saved-row">
+        <div class="when">May 02, 2026<small>2:55 PM · 20m ago</small></div>
+        <div class="px-stack">
+          <span class="saved-at">saved at <b>$396.00</b></span>
+          <span class="now-line">now <b>$397.67</b></span>
+        </div>
+        <div class="verdict-cell"><span class="pill hold">Hold</span></div>
+        <div class="qualifier">with disciplined add-on-weakness bias</div>
+        <button class="row-trash" aria-label="Delete this analysis">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>
+
+      <!-- second saved row to show how multiple stack -->
+      <div class="saved-row">
+        <div class="when">Apr 30, 2026<small>4:12 PM · 2d ago</small></div>
+        <div class="px-stack">
+          <span class="saved-at">saved at <b>$402.00</b></span>
+          <span class="now-line">now <b>$397.67</b></span>
+        </div>
+        <div class="verdict-cell"><span class="pill buy">Buy</span></div>
+        <div class="qualifier">with discipline</div>
+        <button class="row-trash" aria-label="Delete this analysis">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- GEV starred-only -->
+  <div class="ticker-group starred-only" data-ticker="GEV">
+    <div class="ticker-head">
+      <button class="star-btn" data-starred="true" aria-label="Toggle save">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <div class="sym-block">
+        <span class="sym">GEV</span>
+        <span class="name">GE Vernova Inc.</span>
+      </div>
+      <span class="starred-only-action">
+        no analyses saved · <a>run one →</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- UNH starred-only -->
+  <div class="ticker-group starred-only" data-ticker="UNH">
+    <div class="ticker-head">
+      <button class="star-btn" data-starred="true" aria-label="Toggle save">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <div class="sym-block">
+        <span class="sym">UNH</span>
+        <span class="name">UnitedHealth Group Incorporated</span>
+      </div>
+      <span class="starred-only-action">
+        no analyses saved · <a>run one →</a>
+      </span>
+    </div>
+  </div>
+
+  <!-- COST starred-only -->
+  <div class="ticker-group starred-only" data-ticker="COST">
+    <div class="ticker-head">
+      <button class="star-btn" data-starred="true" aria-label="Toggle save">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      </button>
+      <div class="sym-block">
+        <span class="sym">COST</span>
+        <span class="name">Costco Wholesale Corporation</span>
+      </div>
+      <span class="starred-only-action">
+        no analyses saved · <a>run one →</a>
+      </span>
+    </div>
+  </div>
+
+</main>
+
+<!-- ============== NEW BOTTOM NAV LABELS ============== -->
+<nav class="bottom-nav" role="tablist" aria-label="Main navigation">
+  <button class="nav-tab" aria-current="false" aria-label="Brainstorm">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 18h6"/>
+      <path d="M10 22h4"/>
+      <path d="M12 2a7 7 0 0 0-4 12.5c.6.5 1 1.3 1 2v1.5h6V16.5c0-.7.4-1.5 1-2A7 7 0 0 0 12 2z"/>
+    </svg>
+    <span>Brainstorm</span>
+  </button>
+  <button class="nav-tab" aria-current="false" aria-label="Analyze">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <line x1="20" y1="20" x2="16.65" y2="16.65"/>
+    </svg>
+    <span>Analyze</span>
+  </button>
+  <button class="nav-tab" aria-current="true" aria-label="Saved">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+    <span>Saved · 4</span>
+  </button>
+</nav>
+</body>
+</html>

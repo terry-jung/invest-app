@@ -1,0 +1,11 @@
+# Local-only artifacts. Vercel's filesystem is ephemeral so anything
+# here would just be wasted upload + dead weight in the build.
+node_modules
+.next
+.env.local
+.env*.local
+
+# Saved analyses live on the local dev machine — they're personal data
+# that has no business being deployed.
+../output
+output

@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prototype · 3-tab layout</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-2: #fafafa;
+    --line: #e5e5ea; --line-2: #d2d2d7;
+    --ink: #1c1c1e; --muted: #6e6e73;
+    --accent: #0a0a0a; --accent-2: #1e40af;
+    --pos: #047857; --neg: #b91c1c; --amb: #ea580c;
+    --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg); color: var(--ink); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 768px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  /* HEADER */
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line-2); padding-bottom: 1.25rem; margin-bottom: 1.25rem;
+  }
+  h1 {
+    font-family: var(--serif); font-size: 2rem; font-weight: 500;
+    letter-spacing: -0.005em; margin: 0;
+  }
+  .brand {
+    font-size: 10.5px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.24em; text-transform: uppercase;
+  }
+
+  /* TABS */
+  .tabs {
+    display: flex; gap: 4px; padding: 4px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; width: fit-content;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .tab {
+    font: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 16px; border-radius: 5px; border: 0;
+    background: transparent; color: var(--muted); cursor: pointer;
+    letter-spacing: 0.01em;
+  }
+  .tab[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+  /* VIEW SWITCHING */
+  body[data-view="hunter"] .view-run, body[data-view="hunter"] .view-saved { display: none; }
+  body[data-view="run"] .view-hunter, body[data-view="run"] .view-saved { display: none; }
+  body[data-view="saved"] .view-hunter, body[data-view="saved"] .view-run { display: none; }
+
+  /* BUTTONS */
+  .btn {
+    border: 0; padding: 11px 18px; border-radius: 6px;
+    font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+    letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-2); }
+  .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--line-2); }
+  .btn-secondary:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--line-2); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .pill {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase; padding: 5px 11px; border-radius: 999px;
+  }
+  .pill.buy, .pill.expand { background: rgba(4,120,87,0.08);  color: var(--pos); border: 1px solid var(--pos); }
+  .pill.hold   { background: rgba(30,64,175,0.06); color: var(--accent-2); border: 1px solid var(--accent-2); }
+  .pill.reduce, .pill.trim { background: rgba(234,88,12,0.08); color: var(--amb); border: 1px solid var(--amb); }
+  .pill.sell { background: rgba(185,28,28,0.08); color: var(--neg); border: 1px solid var(--neg); }
+
+  /* ============== TICKER HUNTER VIEW ============== */
+  .section-title {
+    font-family: var(--serif); font-size: 1.625rem; font-weight: 500;
+    letter-spacing: -0.005em; margin-top: 2rem; margin-bottom: 4px;
+  }
+  .section-sub {
+    font-size: 13px; color: var(--muted); margin-bottom: 1rem;
+  }
+  .hunter-prompt {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 12px; padding: 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .hunter-prompt textarea {
+    width: 100%; resize: vertical; min-height: 100px;
+    border: 1px solid var(--line-2); background: #fff;
+    padding: 12px 14px; border-radius: 8px;
+    font-family: var(--sans); font-size: 14px; line-height: 1.55;
+    color: var(--ink);
+  }
+  .hunter-prompt textarea:focus {
+    outline: none; border-color: var(--accent-2);
+    box-shadow: 0 0 0 3px rgba(30,64,175,0.15);
+  }
+  .hunter-prompt .actions {
+    margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;
+  }
+  .hunter-prompt .hint {
+    flex: 1; font-size: 11.5px; color: var(--muted);
+    font-style: italic; font-family: var(--serif);
+  }
+
+  .hunter-results {
+    margin-top: 1.25rem;
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 12px; padding: 22px 24px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .hunter-results .head {
+    margin-bottom: 12px; display: flex; align-items: baseline;
+    justify-content: space-between; gap: 12px;
+  }
+  .hunter-results .title { font-family: var(--serif); font-size: 1.375rem; font-weight: 500; }
+  .hunter-results .source { font-size: 11.5px; color: var(--muted); font-style: italic; font-family: var(--serif); margin-top: 2px; }
+  .hunter-results .edit-link {
+    color: var(--accent-2); text-decoration: underline; cursor: pointer; font-size: 12px;
+  }
+  .hunter-results .edit-link:hover { color: var(--accent); }
+
+  .hunter-row {
+    display: grid;
+    grid-template-columns: 36px 110px 1fr auto;
+    gap: 16px; align-items: start;
+    padding: 14px 4px;
+    border-top: 1px solid var(--line);
+  }
+  .hunter-row:first-of-type { border-top: 0; padding-top: 8px; }
+  .hunter-row .rank {
+    font-family: var(--serif); font-size: 1.5rem; font-weight: 500;
+    color: var(--muted); line-height: 1; padding-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .hunter-row .sym-block .sym {
+    font-family: var(--serif); font-size: 1.25rem; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink); display: block; line-height: 1.1;
+  }
+  .hunter-row .sym-block .exch {
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin-top: 4px; display: inline-block;
+  }
+  .hunter-row .body .name {
+    font-size: 13px; color: var(--ink); font-weight: 500;
+  }
+  .hunter-row .body .rationale {
+    font-family: var(--serif); font-size: 14.5px; color: var(--ink);
+    margin-top: 4px; line-height: 1.5;
+  }
+  .hunter-row .actions-stack {
+    display: flex; flex-direction: column; gap: 6px; align-self: center;
+  }
+  .hunter-row .run-btn,
+  .hunter-row .save-ticker-btn {
+    border: 1px solid var(--line-2); background: #fff; color: var(--ink);
+    font: inherit; font-size: 12px; font-weight: 500;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    white-space: nowrap; display: inline-flex; align-items: center;
+    justify-content: center; gap: 6px;
+  }
+  .hunter-row .run-btn:hover {
+    border-color: var(--accent-2); color: var(--accent-2);
+  }
+  .hunter-row .save-ticker-btn { color: var(--muted); }
+  .hunter-row .save-ticker-btn:hover { color: var(--accent-2); border-color: var(--accent-2); }
+  .hunter-row .save-ticker-btn[data-starred="true"] { color: var(--accent-2); border-color: var(--accent-2); background: rgba(30,64,175,0.04); }
+  .hunter-row .save-ticker-btn svg { width: 12px; height: 12px; }
+  .hunter-row .save-ticker-btn[data-starred="true"] svg { fill: var(--accent-2); stroke: var(--accent-2); }
+  .hunter-row .save-ticker-btn[data-starred="false"] svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+  /* Saved tab: starred-only ticker (no analyses yet) */
+  .ticker-group.starred-only .ticker-head { cursor: default; }
+  .ticker-group.starred-only .ticker-head:hover { background: transparent; }
+  .ticker-group.starred-only .ticker-list { display: none !important; }
+  .ticker-group.starred-only .chev { display: none; }
+  .ticker-group.starred-only .ticker-head .toggle .count { display: none; }
+  .starred-only-action {
+    margin-left: 8px; font-size: 11px; color: var(--muted);
+    font-style: italic; font-family: var(--serif);
+  }
+  .starred-only-action a { color: var(--accent-2); text-decoration: underline; cursor: pointer; }
+  .starred-only-action a:hover { color: var(--accent); }
+
+  /* Star next to ticker name in saved tab */
+  .ticker-head .star-btn {
+    width: 24px; height: 24px;
+  }
+  .ticker-head .star-btn svg { width: 14px; height: 14px; }
+
+  /* ============== RUN ANALYSIS VIEW ============== */
+  .search-form { display: flex; gap: 8px; margin-top: 1.25rem; }
+  .search-form input {
+    flex: 1; border: 1px solid var(--line-2); background: #fff;
+    padding: 12px 16px; border-radius: 6px; font: inherit;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+    letter-spacing: 0.04em; font-size: 14px; color: var(--ink);
+  }
+  .search-form input:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(30,64,175,0.15); }
+
+  .ticker-chip {
+    margin-top: 10px; padding: 8px 12px; min-height: 32px;
+    border-radius: 6px; font-size: 12.5px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line);
+  }
+  .ticker-chip .sym { font-family: var(--serif); font-size: 14px; font-weight: 500; color: var(--ink); }
+  .ticker-chip .name { color: var(--muted); }
+  .ticker-chip .px { font-family: var(--serif); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink); margin-left: auto; }
+  .ticker-chip .delta { font-family: var(--serif); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .ticker-chip .delta.pos { color: var(--pos); }
+  .ticker-chip .delta.neg { color: var(--neg); }
+  .ticker-chip .exch { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+  /* Star button — shared across chips, hunter rows, and saved tickers */
+  .star-btn {
+    width: 28px; height: 28px; border-radius: 5px;
+    border: 0; background: transparent; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: color 0.12s, background 0.12s;
+  }
+  .star-btn:hover { background: var(--panel-2); color: var(--accent-2); }
+  .star-btn[data-starred="true"] { color: var(--accent-2); }
+  .star-btn[data-starred="true"]:hover { color: var(--muted); }
+  .star-btn svg { width: 16px; height: 16px; }
+  .star-btn[data-starred="true"] svg { fill: var(--accent-2); stroke: var(--accent-2); }
+  .star-btn[data-starred="false"] svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+  /* VERDICT BANNER */
+  .verdict-banner {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 12px; padding: 24px 28px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    margin-top: 2rem;
+  }
+  .verdict-banner .company {
+    font-family: var(--serif); font-size: 2.125rem; font-weight: 500;
+    line-height: 1.1; letter-spacing: -0.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vb-pill-row { margin-top: 12px; }
+  .verdict-banner .meta {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin-top: 14px;
+  }
+  .verdict-line { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-top: 18px; }
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px;
+    padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); align-items: baseline;
+  }
+  .stats b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .stats .num { color: var(--accent-2); font-weight: 700; font-family: var(--serif); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+  .report-body {
+    margin-top: 1.25rem; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; padding: 2rem 2.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .report-body h2 {
+    font-family: var(--serif); font-weight: 500; font-size: 1.5rem;
+    margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--line);
+    letter-spacing: -0.005em;
+  }
+  .report-body h2:not(:first-child) { margin-top: 2rem; }
+  .report-body h3 {
+    font-family: var(--sans); font-weight: 600; font-size: 0.78rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+    margin: 1.25rem 0 0.4rem;
+  }
+  .report-body p { margin: 0.6rem 0; font-size: 14.5px; }
+
+  .save-zone {
+    margin-top: 1.25rem; padding: 18px 22px; background: var(--panel);
+    border: 1px dashed var(--line-2); border-radius: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .save-zone .text { font-size: 13.5px; color: var(--muted); }
+  .save-zone .text b { color: var(--ink); font-weight: 600; }
+
+  /* ============== SAVED ANALYSIS VIEW ============== */
+  .saved-head { margin-top: 2rem; margin-bottom: 1.25rem; }
+  .saved-head h2 { font-family: var(--serif); font-size: 1.625rem; font-weight: 500; margin: 0; }
+  .saved-head .count { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .saved-head .count b { color: var(--ink); font-weight: 600; }
+
+  .ticker-group { margin-bottom: 1rem; }
+  .ticker-head {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 8px; border-radius: 8px;
+    cursor: pointer; user-select: none;
+    transition: background 0.12s;
+  }
+  .ticker-head:hover { background: var(--panel); }
+  .ticker-head .sym {
+    font-family: var(--serif); font-size: 1.5rem; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink);
+  }
+  .ticker-head .name { font-size: 12.5px; color: var(--muted); }
+  .ticker-head .toggle {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 10px;
+    font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .ticker-head .chev {
+    width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: transform 0.18s ease;
+  }
+  .ticker-group[data-open="true"] .chev { transform: rotate(90deg); color: var(--accent-2); }
+  .ticker-list { display: none; border-top: 1px solid var(--line); margin: 0 8px; padding-top: 4px; }
+  .ticker-group[data-open="true"] .ticker-list { display: block; }
+
+  .saved-row {
+    display: grid;
+    grid-template-columns: 180px 168px 1fr 24px;
+    gap: 16px; align-items: center;
+    padding: 14px 8px; border-radius: 8px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .saved-row:hover { background: var(--panel); }
+  .saved-row + .saved-row { border-top: 1px solid var(--line); }
+  .saved-row .when { font-family: var(--serif); font-size: 14px; font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .saved-row .when small { display: block; color: var(--muted); font-size: 11px; font-family: var(--sans); margin-top: 2px; letter-spacing: 0.02em; }
+  .saved-row .verdict-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+  .saved-row .pill { min-width: 70px; text-align: center; padding: 5px 12px; }
+  .saved-row .qualifier { font-size: 10.5px; color: var(--muted); font-style: italic; font-family: var(--serif); padding-left: 2px; }
+  .saved-row .px { text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .saved-row .px b { color: var(--ink); font-weight: 600; }
+  .saved-row .px .delta-line { display: block; font-size: 11px; margin-top: 3px; font-family: var(--serif); }
+  .saved-row .px .delta-line .now { color: var(--ink); font-weight: 500; }
+  .saved-row .px .delta-line .pct.pos { color: var(--pos); font-weight: 500; }
+  .saved-row .px .delta-line .pct.neg { color: var(--neg); font-weight: 500; }
+  .saved-row .arrow { color: var(--muted); font-size: 14px; text-align: right; }
+  .saved-row:hover .arrow { color: var(--accent-2); }
+
+  .proto-note {
+    margin: 0 0 1.25rem; padding: 10px 14px;
+    background: rgba(30,64,175,0.06); border: 1px solid rgba(30,64,175,0.20);
+    border-radius: 6px; font-size: 12px; color: var(--accent-2);
+  }
+  .proto-note b { font-weight: 700; }
+</style>
+</head>
+<body data-view="hunter">
+<main>
+
+  <p class="proto-note">
+    <b>Prototype.</b> 3-tab layout. Star icons let you save a ticker to <b>Saved</b> without running an analysis — try them on the live-quote chip (Run Analysis), the hunter rows (Ticker Hunter), and on any ticker in the Saved tab. Tap to add, tap again to remove. Tickers with zero analyses display as a single non-expandable row. The count next to "Saved" tracks unique tickers, not analyses.
+  </p>
+
+  <header>
+    <h1>AI Investment Co-Pilot</h1>
+    <div class="brand">invest.app</div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-pressed="true" data-view="hunter">Ticker Hunter</button>
+    <button class="tab" role="tab" aria-pressed="false" data-view="run">Run Analysis</button>
+    <button class="tab" role="tab" aria-pressed="false" data-view="saved">
+      Saved <span id="saved-count" style="opacity:0.6; margin-left:4px; font-variant-numeric: tabular-nums;">· 4</span>
+    </button>
+  </div>
+
+  <!-- ============================ TICKER HUNTER ============================ -->
+  <section class="view-hunter">
+    <div class="section-title">Hunt for ideas</div>
+    <div class="section-sub">Describe what you're looking for. Hunter returns 10 ranked picks with rationale.</div>
+
+    <div class="hunter-prompt">
+      <textarea placeholder="e.g. defensive dividend payers benefiting from a falling-rate cycle, US-listed, market cap > 20B">defensive dividend payers benefiting from a falling-rate cycle, US-listed, market cap &gt; 20B</textarea>
+      <div class="actions">
+        <span class="hint">Be specific. Mention sectors, market caps, themes, or constraints.</span>
+        <button class="btn btn-secondary" onclick="resetHunter()">Clear</button>
+        <button class="btn btn-primary" onclick="askAI()">Ask AI</button>
+      </div>
+    </div>
+
+    <div class="hunter-results" id="hunter-results" style="display: none;">
+      <div class="head">
+        <div>
+          <div class="title">Hunter ranked these 10 ideas</div>
+          <div class="source">Most recommended first · click <b>Run analysis</b> to deep-dive any of them</div>
+        </div>
+        <a class="edit-link" onclick="editPrompt()">← Edit prompt</a>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">1</div>
+        <div class="sym-block"><span class="sym">NEE</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">NextEra Energy, Inc.</div>
+          <div class="rationale">Largest US regulated utility plus renewables developer with ~$1.1T capex backlog; falling rates lower its heavy financing costs and re-rate the bond-proxy yield (~3%) while EPS grows 6–8%.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('NEE')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">2</div>
+        <div class="sym-block"><span class="sym">SO</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">The Southern Company</div>
+          <div class="rationale">Regulated Southeast utility with Vogtle nuclear now fully online removing the overhang; ~3.3% yield and 23-year dividend streak make it a textbook duration-sensitive defensive.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('SO')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">3</div>
+        <div class="sym-block"><span class="sym">DUK</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">Duke Energy Corporation</div>
+          <div class="rationale">Pure-play regulated utility across the Carolinas/Florida with constructive rate cases; ~3.6% yield and high leverage make EPS unusually sensitive to lower refinancing rates.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('DUK')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">4</div>
+        <div class="sym-block"><span class="sym">AMT</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">American Tower Corporation</div>
+          <div class="rationale">Tower REIT with contractual escalators and global cell-site moat; falling rates directly compress its weighted cost of debt on >$45B of obligations and lift AFFO multiples.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('AMT')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">5</div>
+        <div class="sym-block"><span class="sym">O</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">Realty Income Corporation</div>
+          <div class="rationale">Monthly-paying net-lease REIT with A− balance sheet and 650+ consecutive dividends; ~5.5% yield trades inversely to the 10Y, giving direct beta to rate cuts.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('O')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">6</div>
+        <div class="sym-block"><span class="sym">PG</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">The Procter &amp; Gamble Company</div>
+          <div class="rationale">Quintessential staples compounder with 68-year Dividend King status; defensive cash flows and bond-proxy multiple expand as Treasury yields compress.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('PG')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">7</div>
+        <div class="sym-block"><span class="sym">JNJ</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">Johnson &amp; Johnson</div>
+          <div class="rationale">AAA balance sheet healthcare conglomerate with 62-year dividend streak; Kenvue spinoff sharpened focus on Pharma + MedTech, ~3% yield with low-single-digit growth.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('JNJ')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">8</div>
+        <div class="sym-block"><span class="sym">KO</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">The Coca-Cola Company</div>
+          <div class="rationale">Global beverage moat with ~3% yield and 62-year dividend streak; FX-exposed but durable pricing power; benefits from any USD weakening that often accompanies cuts.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('KO')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">9</div>
+        <div class="sym-block"><span class="sym">VICI</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">VICI Properties Inc.</div>
+          <div class="rationale">Triple-net casino REIT with 100% rent collection through COVID and ~5.7% yield; CPI-linked escalators on most leases hedge inflation while rate cuts re-rate the multiple.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('VICI')">Run analysis →</button>
+      </div>
+
+      <div class="hunter-row">
+        <div class="rank">10</div>
+        <div class="sym-block"><span class="sym">MO</span><br><span class="exch">NYSE</span></div>
+        <div class="body">
+          <div class="name">Altria Group, Inc.</div>
+          <div class="rationale">~7.5% yield with 54-year dividend streak; pure-yield-vehicle thesis for falling rates, though terminal-value risk from declining smoking rates caps upside.</div>
+        </div>
+        <button class="run-btn" onclick="pickTicker('MO')">Run analysis →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ RUN ANALYSIS ============================ -->
+  <section class="view-run">
+    <form class="search-form" onsubmit="event.preventDefault(); return false;">
+      <input id="ticker-input" value="LLY" placeholder="Ticker — e.g. NVDA" oninput="paintChip(this.value)" />
+      <button class="btn btn-primary" type="submit">Run analysis</button>
+    </form>
+
+    <div class="ticker-chip" id="ticker-chip">
+      <span class="sym">LLY</span>
+      <span class="name">Eli Lilly &amp; Company</span>
+      <span class="exch">NYSE</span>
+      <span class="px">$872.10</span>
+      <span class="delta pos">↑ +0.24%</span>
+      <button class="star-btn" data-starred="false" onclick="toggleStarChip(this, 'LLY', 'Eli Lilly &amp; Company')" title="Save ticker to Saved" aria-label="Save ticker">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </button>
+    </div>
+
+    <div class="verdict-banner" style="margin-top: 1.5rem;">
+      <div class="company">Eli Lilly &amp; Company</div>
+      <div class="vb-pill-row">
+        <span class="pill buy">BUY · with discipline</span>
+      </div>
+      <div class="meta">NYSE: LLY · Investment Analysis · 36-Month Horizon</div>
+      <div class="verdict-line">
+        Buy zone &lt;<b>$870</b> · Full position &lt;<b>$800</b> · Trim &gt;<b>$1,200</b>
+      </div>
+      <div class="stats">
+        <div><b>As-of</b><span class="num">2026-04-30</span></div>
+        <div><b>Price</b><span class="num">~$870</span></div>
+        <div><b>Market Cap</b><span class="num">~$780B</span></div>
+      </div>
+    </div>
+
+    <article class="report-body">
+      <h2>1. TL;DR — 36-Month Verdict</h2>
+      <p>BUY with discipline. Accumulate in the $750–$870 zone, full position size below $800, trim aggressively above $1,200.</p>
+      <h3>Core rationale</h3>
+      <p>The drug-pricing macro is genuinely worse than 18 months ago, but Lilly has the broadest GLP-1 franchise in the industry with manufacturing scale and clinical-data leads that are durable through this cycle.</p>
+      <p style="font-size:12.5px; color:var(--muted); font-style:italic;">…sections 2–9 truncated for prototype…</p>
+    </article>
+
+    <div class="save-zone">
+      <div class="text">Want to come back to this later? <b>Save it.</b></div>
+      <button class="btn btn-secondary">Save analysis</button>
+    </div>
+  </section>
+
+  <!-- ============================ SAVED ANALYSIS ============================ -->
+  <section class="view-saved">
+    <div class="saved-head">
+      <div style="display:flex; align-items: baseline; justify-content: space-between; gap: 16px;">
+        <div>
+          <h2>Saved analyses</h2>
+          <p class="count"><b>8</b> reports across <b>4</b> tickers · newest first</p>
+        </div>
+        <button class="btn btn-ghost" onclick="toggleAll()" style="font-size: 11.5px; padding: 6px 10px;">Expand all</button>
+      </div>
+    </div>
+
+    <div id="saved-list">
+      <div class="ticker-group" data-open="false" data-ticker="LLY" data-starred="true">
+        <div class="ticker-head">
+          <button class="star-btn" data-starred="true" onclick="toggleStarSaved(event, 'LLY', 'Eli Lilly & Company')" aria-label="Toggle save">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <span class="sym" onclick="toggleGroup(this.parentElement)">LLY</span>
+          <span class="name">Eli Lilly &amp; Company</span>
+          <span class="toggle">
+            <span class="count">2</span>
+            <span class="chev" onclick="toggleGroup(this.closest('.ticker-head'))">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+            </span>
+          </span>
+        </div>
+        <div class="ticker-list">
+          <div class="saved-row" onclick="loadSaved('LLY')">
+            <div class="when">Apr 30, 2026<small>4:12 PM · today</small></div>
+            <div class="verdict-cell"><span class="pill buy">Buy</span><span class="qualifier">with discipline</span></div>
+            <div class="px"><span>saved at <b>$870</b></span><span class="delta-line">now <span class="now">$872.10</span> <span class="pct pos">↑ +0.24%</span></span></div>
+            <span class="arrow">→</span>
+          </div>
+          <div class="saved-row" onclick="loadSaved('LLY')">
+            <div class="when">Mar 22, 2026<small>9:08 AM · 5w ago</small></div>
+            <div class="verdict-cell"><span class="pill hold">Hold</span></div>
+            <div class="px"><span>saved at <b>$1,015</b></span><span class="delta-line">now <span class="now">$872.10</span> <span class="pct neg">↓ −14.07%</span></span></div>
+            <span class="arrow">→</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ticker-group" data-open="false" data-ticker="NVDA" data-starred="false">
+        <div class="ticker-head">
+          <button class="star-btn" data-starred="false" onclick="toggleStarSaved(event, 'NVDA', 'NVIDIA Corp')" aria-label="Toggle save">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <span class="sym" onclick="toggleGroup(this.parentElement)">NVDA</span>
+          <span class="name">NVIDIA Corp</span>
+          <span class="toggle">
+            <span class="count">1</span>
+            <span class="chev" onclick="toggleGroup(this.closest('.ticker-head'))">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+            </span>
+          </span>
+        </div>
+        <div class="ticker-list">
+          <div class="saved-row" onclick="loadSaved('NVDA')">
+            <div class="when">Apr 28, 2026<small>10:15 AM · 2d ago</small></div>
+            <div class="verdict-cell"><span class="pill expand">Expand</span></div>
+            <div class="px"><span>saved at <b>$213</b></span><span class="delta-line">now <span class="now">$215.50</span> <span class="pct pos">↑ +1.17%</span></span></div>
+            <span class="arrow">→</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ticker-group" data-open="false" data-ticker="ENS" data-starred="false">
+        <div class="ticker-head">
+          <button class="star-btn" data-starred="false" onclick="toggleStarSaved(event, 'ENS', 'EnerSys')" aria-label="Toggle save">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <span class="sym" onclick="toggleGroup(this.parentElement)">ENS</span>
+          <span class="name">EnerSys</span>
+          <span class="toggle">
+            <span class="count">1</span>
+            <span class="chev" onclick="toggleGroup(this.closest('.ticker-head'))">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+            </span>
+          </span>
+        </div>
+        <div class="ticker-list">
+          <div class="saved-row" onclick="loadSaved('ENS')">
+            <div class="when">Apr 29, 2026<small>3:55 PM · yesterday</small></div>
+            <div class="verdict-cell"><span class="pill reduce">Reduce</span></div>
+            <div class="px"><span>saved at <b>$206</b></span><span class="delta-line">now <span class="now">$208.30</span> <span class="pct pos">↑ +1.12%</span></span></div>
+            <span class="arrow">→</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Starred-only ticker (no analyses yet) — demos the new state -->
+      <div class="ticker-group starred-only" data-ticker="TSLA" data-starred="true">
+        <div class="ticker-head">
+          <button class="star-btn" data-starred="true" onclick="toggleStarSaved(event, 'TSLA', 'Tesla, Inc.')" aria-label="Toggle save">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <span class="sym">TSLA</span>
+          <span class="name">Tesla, Inc.</span>
+          <span class="starred-only-action">
+            no analyses saved · <a onclick="loadSaved('TSLA')">run one →</a>
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+  // Tabs
+  document.querySelectorAll('.tab').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', 'true');
+      document.body.dataset.view = b.dataset.view;
+    });
+  });
+
+  // Hunter
+  function askAI() {
+    document.getElementById('hunter-results').style.display = 'block';
+  }
+  function editPrompt() {
+    document.getElementById('hunter-results').style.display = 'none';
+    document.querySelector('.hunter-prompt textarea').focus();
+  }
+  function resetHunter() {
+    document.querySelector('.hunter-prompt textarea').value = '';
+    document.getElementById('hunter-results').style.display = 'none';
+  }
+  function pickTicker(sym) {
+    // Switch to Run Analysis tab with ticker pre-filled
+    document.getElementById('ticker-input').value = sym;
+    paintChip(sym);
+    document.querySelector('.tab[data-view="run"]').click();
+    setTimeout(() => document.getElementById('ticker-input').focus(), 200);
+  }
+
+  // Run Analysis chip
+  const QUOTES = {
+    LLY: { name: 'Eli Lilly & Company', exch: 'NYSE', px: 872.10, dPct: 0.24 },
+    NEE: { name: 'NextEra Energy, Inc.', exch: 'NYSE', px: 73.40, dPct: 0.45 },
+    SO:  { name: 'The Southern Company', exch: 'NYSE', px: 91.20, dPct: -0.11 },
+    DUK: { name: 'Duke Energy Corporation', exch: 'NYSE', px: 119.80, dPct: 0.32 },
+    AMT: { name: 'American Tower Corporation', exch: 'NYSE', px: 218.40, dPct: 0.56 },
+    O:   { name: 'Realty Income Corporation', exch: 'NYSE', px: 58.90, dPct: 0.12 },
+    PG:  { name: 'The Procter & Gamble Company', exch: 'NYSE', px: 168.30, dPct: -0.08 },
+    JNJ: { name: 'Johnson & Johnson', exch: 'NYSE', px: 161.20, dPct: 0.21 },
+    KO:  { name: 'The Coca-Cola Company', exch: 'NYSE', px: 71.40, dPct: 0.34 },
+    VICI:{ name: 'VICI Properties Inc.', exch: 'NYSE', px: 33.20, dPct: 0.65 },
+    MO:  { name: 'Altria Group, Inc.', exch: 'NYSE', px: 51.80, dPct: -0.15 },
+    NVDA:{ name: 'NVIDIA Corp', exch: 'NASDAQ', px: 215.50, dPct: 1.17 },
+    ENS: { name: 'EnerSys', exch: 'NYSE', px: 208.30, dPct: 1.12 },
+  };
+  function paintChip(raw) {
+    const v = (raw || '').toUpperCase().trim();
+    const chip = document.getElementById('ticker-chip');
+    const q = QUOTES[v];
+    if (!v || !q) { chip.style.display = 'none'; return; }
+    chip.style.display = 'flex';
+    const pos = q.dPct >= 0;
+    const arrow = pos ? '↑' : '↓';
+    const sign = pos ? '+' : '−';
+    const starred = !!(SAVED_STATE[v] && SAVED_STATE[v].starred);
+    chip.innerHTML = `
+      <span class="sym">${v}</span>
+      <span class="name">${q.name}</span>
+      <span class="exch">${q.exch}</span>
+      <span class="px">$${q.px.toFixed(2)}</span>
+      <span class="delta ${pos ? 'pos' : 'neg'}">${arrow} ${sign}${Math.abs(q.dPct).toFixed(2)}%</span>
+      <button class="star-btn" data-starred="${starred}" title="Save ticker to Saved" aria-label="Save ticker">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </button>
+    `;
+    chip.querySelector('.star-btn').addEventListener('click', function() {
+      toggleStarChip(this, v, q.name);
+    });
+  }
+  // Initial paint to ensure chip uses live state
+  paintChip(document.getElementById('ticker-input').value);
+
+  // Saved
+  function toggleGroup(el) {
+    const g = el.closest('.ticker-group');
+    if (g.classList.contains('starred-only')) return;
+    g.dataset.open = g.dataset.open === 'true' ? 'false' : 'true';
+  }
+  function toggleAll() {
+    const groups = document.querySelectorAll('.ticker-group:not(.starred-only)');
+    const anyClosed = Array.from(groups).some(g => g.dataset.open !== 'true');
+    groups.forEach(g => g.dataset.open = anyClosed ? 'true' : 'false');
+  }
+  function loadSaved(sym) {
+    document.getElementById('ticker-input').value = sym;
+    paintChip(sym);
+    document.querySelector('.tab[data-view="run"]').click();
+  }
+
+  // ---------- STAR / SAVE TICKER LOGIC ----------
+  // Mock state: tickers in saved that have analyses count
+  const SAVED_STATE = {
+    LLY:  { name: 'Eli Lilly & Company', starred: true,  hasAnalyses: true },
+    NVDA: { name: 'NVIDIA Corp',          starred: false, hasAnalyses: true },
+    ENS:  { name: 'EnerSys',              starred: false, hasAnalyses: true },
+    TSLA: { name: 'Tesla, Inc.',          starred: true,  hasAnalyses: false }, // starred-only
+  };
+
+  function recomputeSavedCount() {
+    // Tickers in saved tab = those with starred=true OR hasAnalyses=true
+    const n = Object.values(SAVED_STATE).filter(s => s.starred || s.hasAnalyses).length;
+    document.getElementById('saved-count').textContent = '· ' + n;
+  }
+  recomputeSavedCount();
+
+  // Star toggle on the chip (Run Analysis tab)
+  function toggleStarChip(btn, ticker, name) {
+    const next = btn.dataset.starred === 'true' ? 'false' : 'true';
+    btn.dataset.starred = next;
+    if (!SAVED_STATE[ticker]) SAVED_STATE[ticker] = { name, starred: false, hasAnalyses: false };
+    SAVED_STATE[ticker].starred = next === 'true';
+    syncSavedList();
+    recomputeSavedCount();
+  }
+
+  // Star toggle on a hunter result row
+  function toggleStarHunter(btn, ticker, name) {
+    const next = btn.dataset.starred === 'true' ? 'false' : 'true';
+    btn.dataset.starred = next;
+    btn.querySelector('span').textContent = next === 'true' ? 'Saved' : 'Save ticker';
+    if (!SAVED_STATE[ticker]) SAVED_STATE[ticker] = { name, starred: false, hasAnalyses: false };
+    SAVED_STATE[ticker].starred = next === 'true';
+    syncSavedList();
+    recomputeSavedCount();
+  }
+
+  // Star toggle on a saved-tab ticker
+  function toggleStarSaved(e, ticker, name) {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const next = btn.dataset.starred === 'true' ? 'false' : 'true';
+    btn.dataset.starred = next;
+    SAVED_STATE[ticker].starred = next === 'true';
+    syncSavedList();
+    recomputeSavedCount();
+  }
+
+  // Re-render the saved list to reflect current state
+  function syncSavedList() {
+    const list = document.getElementById('saved-list');
+
+    // Update existing groups: starred state, starred-only flag, removal if neither starred nor has analyses
+    Array.from(list.children).forEach(grp => {
+      const ticker = grp.dataset.ticker;
+      const s = SAVED_STATE[ticker];
+      if (!s || (!s.starred && !s.hasAnalyses)) {
+        // Remove from saved list (animate)
+        grp.style.transition = 'opacity 0.18s, max-height 0.22s, padding 0.22s, margin 0.22s';
+        grp.style.opacity = '0';
+        grp.style.maxHeight = '0';
+        grp.style.padding = '0';
+        grp.style.margin = '0';
+        grp.style.overflow = 'hidden';
+        setTimeout(() => grp.remove(), 250);
+        return;
+      }
+      grp.dataset.starred = s.starred ? 'true' : 'false';
+      const starBtn = grp.querySelector('.ticker-head > .star-btn');
+      if (starBtn) starBtn.dataset.starred = s.starred ? 'true' : 'false';
+      // Toggle starred-only class
+      if (s.starred && !s.hasAnalyses) grp.classList.add('starred-only');
+      else grp.classList.remove('starred-only');
+    });
+
+    // Add new starred-only tickers that don't exist in the list yet
+    Object.entries(SAVED_STATE).forEach(([ticker, s]) => {
+      if (!s.starred && !s.hasAnalyses) return;
+      const existing = list.querySelector(`[data-ticker="${ticker}"]`);
+      if (existing) return;
+      // New ticker, starred-only since no analyses
+      const grp = document.createElement('div');
+      grp.className = 'ticker-group starred-only';
+      grp.dataset.ticker = ticker;
+      grp.dataset.starred = 'true';
+      grp.innerHTML = `
+        <div class="ticker-head">
+          <button class="star-btn" data-starred="true" onclick="toggleStarSaved(event, '${ticker}', '${s.name.replace(/'/g, "\\'")}')" aria-label="Toggle save">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <span class="sym">${ticker}</span>
+          <span class="name">${s.name}</span>
+          <span class="starred-only-action">
+            no analyses saved · <a onclick="loadSaved('${ticker}')">run one →</a>
+          </span>
+        </div>
+      `;
+      list.prepend(grp);
+    });
+  }
+
+  // Transform all hunter rows: wrap run-btn in actions-stack, add Save ticker button
+  document.querySelectorAll('.hunter-row').forEach(row => {
+    if (row.querySelector('.actions-stack')) return;
+    const runBtn = row.querySelector('.run-btn');
+    if (!runBtn) return;
+    const m = (runBtn.getAttribute('onclick') || '').match(/pickTicker\('([^']+)'\)/);
+    if (!m) return;
+    const ticker = m[1];
+    const name = (row.querySelector('.body .name') || {}).textContent || ticker;
+    const stack = document.createElement('div');
+    stack.className = 'actions-stack';
+    runBtn.parentNode.insertBefore(stack, runBtn);
+    stack.appendChild(runBtn);
+    const initialStarred = !!(SAVED_STATE[ticker] && SAVED_STATE[ticker].starred);
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'save-ticker-btn';
+    saveBtn.dataset.starred = initialStarred ? 'true' : 'false';
+    saveBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>${initialStarred ? 'Saved' : 'Save ticker'}</span>
+    `;
+    saveBtn.addEventListener('click', () => toggleStarHunter(saveBtn, ticker, name));
+    stack.appendChild(saveBtn);
+  });
+</script>
+</body>
+</html>

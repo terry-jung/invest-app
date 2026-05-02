@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Prototype · Saved Analyses</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --panel: #ffffff; --panel-2: #fafafa;
+    --line: #e5e5ea; --line-2: #d2d2d7;
+    --ink: #1c1c1e; --muted: #6e6e73;
+    --accent: #0a0a0a; --accent-2: #1e40af;
+    --pos: #047857; --neg: #b91c1c; --amb: #ea580c;
+    --serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "SF Pro Text", "Inter", BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg); color: var(--ink); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 768px; margin: 0 auto; padding: 4rem 1.5rem; }
+
+  /* ---------- HEADER + TABS ---------- */
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line-2); padding-bottom: 1.25rem; margin-bottom: 1.75rem;
+  }
+  h1 {
+    font-family: var(--serif); font-size: 2rem; font-weight: 500;
+    letter-spacing: -0.005em; margin: 0;
+  }
+  .brand {
+    font-size: 10.5px; font-weight: 700; color: var(--muted);
+    letter-spacing: 0.24em; text-transform: uppercase;
+  }
+  .tabs {
+    display: flex; gap: 4px; padding: 4px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; width: fit-content;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .tab {
+    font: inherit; font-size: 13px; font-weight: 500;
+    padding: 7px 16px; border-radius: 5px; border: 0;
+    background: transparent; color: var(--muted); cursor: pointer;
+    letter-spacing: 0.01em;
+  }
+  .tab[aria-pressed="true"] {
+    background: var(--accent); color: #fff;
+  }
+
+  /* ---------- VIEW SWITCHING ---------- */
+  body[data-view="report"] .view-saved { display: none; }
+  body[data-view="saved"]  .view-report { display: none; }
+  body[data-view="saved"]  .search-form  { display: none; }
+
+  /* ---------- SEARCH BAR ---------- */
+  .search-form { display: flex; gap: 8px; margin-top: 20px; }
+  .search-form input {
+    flex: 1; border: 1px solid var(--line-2); background: #fff;
+    padding: 12px 16px; border-radius: 6px; font: inherit;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+    letter-spacing: 0.04em; font-size: 14px; color: var(--ink);
+  }
+  .search-form input:focus { outline: none; border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(30,64,175,0.15); }
+  .btn {
+    border: 0; padding: 12px 20px; border-radius: 6px;
+    font: inherit; font-size: 13px; font-weight: 500;
+    cursor: pointer; letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-2); }
+  .btn-secondary { background: #fff; color: var(--ink); border: 1px solid var(--line-2); }
+  .btn-secondary:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--line-2); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Ticker validation chip — appears under the search bar as user types */
+  .ticker-chip {
+    margin-top: 10px; padding: 8px 12px; min-height: 32px;
+    border-radius: 6px; font-size: 12.5px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    color: var(--muted); transition: opacity 0.15s ease;
+    opacity: 0;
+  }
+  .ticker-chip[data-state="valid"]   { opacity: 1; background: var(--panel); border: 1px solid var(--line); }
+  .ticker-chip[data-state="invalid"] { opacity: 1; background: rgba(185,28,28,0.04); border: 1px solid rgba(185,28,28,0.18); color: var(--neg); }
+  .ticker-chip[data-state="loading"] { opacity: 1; color: var(--muted); }
+  .ticker-chip .sym { font-family: var(--serif); font-size: 14px; font-weight: 500; color: var(--ink); }
+  .ticker-chip .name { color: var(--muted); }
+  .ticker-chip .px { font-family: var(--serif); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--ink); margin-left: auto; }
+  .ticker-chip .delta { font-family: var(--serif); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .ticker-chip .delta.pos { color: var(--pos); }
+  .ticker-chip .delta.neg { color: var(--neg); }
+  .ticker-chip .exch { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+  /* Spinner glyph */
+  .spin {
+    display: inline-block; width: 12px; height: 12px;
+    border: 1.5px solid var(--line-2); border-top-color: var(--accent-2);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- PRICE LOOKUP CARD ---------- */
+  .lookup-card {
+    display: none;
+    margin-top: 1.5rem;
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 12px; padding: 22px 26px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    position: relative;
+  }
+  .lookup-card[data-open="true"] { display: block; }
+  .lookup-close {
+    position: absolute; top: 12px; right: 12px;
+    width: 30px; height: 30px; border-radius: 6px;
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+  }
+  .lookup-close:hover { background: var(--panel-2); color: var(--ink); }
+  .lookup-head { display: flex; align-items: baseline; gap: 12px; }
+  .lookup-head .sym {
+    font-family: var(--serif); font-size: 1.875rem; font-weight: 500;
+    letter-spacing: -0.01em; line-height: 1;
+  }
+  .lookup-head .name { font-size: 13px; color: var(--muted); }
+  .lookup-head .exch {
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+    background: var(--panel-2); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--line);
+    margin-left: auto;
+  }
+  .lookup-price {
+    font-family: var(--serif); font-size: 2.625rem; font-weight: 500;
+    letter-spacing: -0.015em; line-height: 1.05; margin-top: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+  .lookup-delta {
+    font-family: var(--serif); font-size: 1.05rem; font-weight: 500;
+    margin-top: 4px; font-variant-numeric: tabular-nums;
+  }
+  .lookup-delta.pos { color: var(--pos); }
+  .lookup-delta.neg { color: var(--neg); }
+  .lookup-delta .sub { color: var(--muted); font-style: italic; font-size: 12.5px; margin-left: 8px; font-weight: 400; }
+  .lookup-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px 24px; margin-top: 22px; padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .lookup-stats .cell .lbl {
+    font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  .lookup-stats .cell .val {
+    font-family: var(--serif); font-size: 16px; font-weight: 500;
+    color: var(--ink); margin-top: 4px; font-variant-numeric: tabular-nums;
+  }
+  .lookup-foot { margin-top: 14px; font-size: 10.5px; color: var(--muted); font-style: italic; }
+
+  /* ---------- VERDICT BANNER (report view) ---------- */
+  .verdict-banner {
+    border: 1px solid var(--line); background: var(--panel);
+    border-radius: 12px; padding: 24px 28px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    margin-top: 2rem;
+  }
+  .company {
+    font-family: var(--serif); font-size: 2.125rem; font-weight: 500;
+    line-height: 1.1; letter-spacing: -0.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vb-pill-row { margin-top: 12px; }
+  .meta {
+    font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; margin-top: 14px;
+  }
+  .pill {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.22em; text-transform: uppercase; padding: 5px 11px; border-radius: 999px;
+  }
+  .pill.buy   { background: rgba(4,120,87,0.08);  color: var(--pos); border: 1px solid var(--pos); }
+  .pill.hold  { background: rgba(30,64,175,0.06); color: var(--accent-2); border: 1px solid var(--accent-2); }
+  .pill.trim,
+  .pill.reduce { background: rgba(234,88,12,0.08); color: var(--amb); border: 1px solid var(--amb); }
+  .pill.sell  { background: rgba(185,28,28,0.08); color: var(--neg); border: 1px solid var(--neg); }
+  .pill.expand{ background: rgba(4,120,87,0.08); color: var(--pos); border: 1px solid var(--pos); }
+  .verdict-line { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-top: 18px; }
+  .ranges { font-size: 13.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 28px; margin-top: 18px;
+    padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+    align-items: baseline;
+  }
+  .stats b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .stats .num { color: var(--accent-2); font-weight: 700; font-family: var(--serif); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+  /* SAVE BUTTON STATES */
+  .save-cta { display: inline-flex; align-items: center; gap: 6px; }
+  .save-cta.saved { color: var(--pos); border-color: var(--pos); }
+  .save-cta.saved::before { content: "✓"; font-weight: 700; }
+
+  /* ---------- REPORT BODY (placeholder) ---------- */
+  .report-body {
+    margin-top: 1.25rem; background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; padding: 2rem 2.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .report-body h2 {
+    font-family: var(--serif); font-weight: 500; font-size: 1.5rem;
+    margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--line);
+    letter-spacing: -0.005em;
+  }
+  .report-body h2:not(:first-child) { margin-top: 2rem; }
+  .report-body h3 {
+    font-family: var(--sans); font-weight: 600; font-size: 0.78rem;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+    margin: 1.25rem 0 0.4rem;
+  }
+  .report-body p { margin: 0.6rem 0; font-size: 14.5px; }
+  .report-body table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 12.5px; }
+  .report-body thead {
+    background: var(--panel-2); border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
+  }
+  .report-body th {
+    text-align: left; padding: 9px 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; color: var(--muted);
+  }
+  .report-body td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.4; }
+  .report-body tbody tr:hover { background: var(--panel-2); }
+  .report-body ul { padding-left: 1.25rem; margin: 0.5rem 0 0.75rem; }
+  .report-body li { margin: 0.25rem 0; font-size: 14.5px; }
+
+  .save-zone {
+    margin-top: 1.25rem; padding: 18px 22px; background: var(--panel);
+    border: 1px dashed var(--line-2); border-radius: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .save-zone .text { font-size: 13.5px; color: var(--muted); }
+  .save-zone .text b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- SAVED VIEW ---------- */
+  .saved-head { margin-top: 2rem; margin-bottom: 1.25rem; }
+  .saved-head h2 { font-family: var(--serif); font-size: 1.625rem; font-weight: 500; margin: 0; }
+  .saved-head .count { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .saved-head .count b { color: var(--ink); font-weight: 600; }
+
+  .empty-state {
+    border: 1px dashed var(--line-2); border-radius: 12px;
+    padding: 3rem 2rem; text-align: center; color: var(--muted);
+    font-family: var(--serif); font-style: italic;
+  }
+
+  .ticker-group { margin-bottom: 1rem; }
+  .ticker-head {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 10px 8px; border-radius: 8px;
+    cursor: pointer; user-select: none;
+    transition: background 0.12s;
+  }
+  .ticker-head:hover { background: var(--panel); }
+  .ticker-head .sym {
+    font-family: var(--serif); font-size: 1.5rem; font-weight: 500;
+    letter-spacing: -0.005em; color: var(--ink);
+  }
+  .ticker-head .name { font-size: 12.5px; color: var(--muted); }
+  .ticker-head .toggle {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 10px;
+    font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .ticker-head .chev {
+    width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: transform 0.18s ease;
+  }
+  .ticker-group[data-open="true"] .chev { transform: rotate(90deg); color: var(--accent-2); }
+
+  /* Trash buttons — hover-revealed, muted, never compete with the primary CTAs */
+  .icon-btn {
+    width: 26px; height: 26px; border-radius: 5px;
+    border: 0; background: transparent; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--muted); transition: opacity 0.15s, color 0.15s, background 0.15s;
+    opacity: 0;
+  }
+  .icon-btn:hover { color: var(--neg); background: rgba(185,28,28,0.06); }
+  .ticker-head:hover .icon-btn,
+  .saved-row:hover .icon-btn { opacity: 1; }
+
+  /* Inline confirm bar (replaces row content during deletion confirm) */
+  .confirm-bar {
+    display: none; align-items: center; justify-content: space-between;
+    gap: 14px; padding: 12px 14px; border-radius: 8px;
+    background: rgba(185,28,28,0.04); border: 1px solid rgba(185,28,28,0.18);
+    font-size: 13px; color: var(--ink);
+  }
+  .confirm-bar .msg { font-family: var(--serif); font-size: 14.5px; }
+  .confirm-bar .actions { display: flex; gap: 6px; }
+  .confirm-bar button {
+    font: inherit; font-size: 12px; padding: 6px 12px; border-radius: 5px;
+    border: 1px solid var(--line-2); background: #fff; color: var(--ink); cursor: pointer;
+  }
+  .confirm-bar button:hover { border-color: var(--ink); }
+  .confirm-bar button.danger {
+    background: var(--neg); color: #fff; border-color: var(--neg);
+  }
+  .confirm-bar button.danger:hover { background: #991b1b; border-color: #991b1b; }
+
+  /* When confirm is open: hide normal contents, show confirm bar */
+  .saved-row[data-confirm="true"] > *:not(.confirm-bar),
+  .ticker-group[data-confirm="true"] > .ticker-head > *:not(.confirm-bar) { display: none; }
+  .saved-row[data-confirm="true"] .confirm-bar,
+  .ticker-group[data-confirm="true"] > .ticker-head > .confirm-bar { display: flex; }
+  .saved-row[data-confirm="true"] {
+    grid-template-columns: 1fr; padding: 0; cursor: default;
+  }
+  .saved-row[data-confirm="true"]:hover { background: transparent; }
+
+  /* Removed-state animation */
+  .saved-row.removed,
+  .ticker-group.removed {
+    opacity: 0; max-height: 0; overflow: hidden; padding: 0; margin: 0;
+    border: 0;
+    transition: opacity 0.2s, max-height 0.25s, padding 0.25s, margin 0.25s;
+  }
+
+  /* "Saved · timestamp" indicator above the report when viewing a saved analysis */
+  .saved-indicator {
+    display: none; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+    padding: 10px 14px; border-radius: 8px;
+    background: rgba(30,64,175,0.04); border: 1px solid rgba(30,64,175,0.18);
+    font-size: 12.5px; color: var(--accent-2);
+    margin-top: 1.5rem;
+  }
+  body[data-mode="saved-view"] .saved-indicator { display: flex; }
+  body[data-mode="saved-view"] .save-zone { display: none; }
+  .saved-indicator b { font-weight: 700; letter-spacing: 0.04em; }
+  .saved-indicator a { color: var(--accent-2); text-decoration: underline; cursor: pointer; }
+  .saved-indicator a:hover { color: var(--accent); }
+  .ticker-list {
+    display: none;
+    border-top: 1px solid var(--line);
+    margin: 0 8px; padding-top: 4px;
+  }
+  .ticker-group[data-open="true"] .ticker-list { display: block; }
+
+  /* Aligned grid — fixed pill column for visual rhythm */
+  .saved-row {
+    display: grid;
+    grid-template-columns: 180px 168px 1fr 24px;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 8px; border-radius: 8px;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .saved-row:hover { background: var(--panel); }
+  .saved-row + .saved-row { border-top: 1px solid var(--line); }
+  .saved-row .when {
+    font-family: var(--serif); font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+  }
+  .saved-row .when small { display: block; color: var(--muted); font-size: 11px; font-family: var(--sans); margin-top: 2px; letter-spacing: 0.02em; }
+
+  /* Pill column — fixed width, pill aligned to start, qualifier sits below */
+  .saved-row .verdict-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+  .saved-row .pill {
+    min-width: 70px; text-align: center;
+    padding: 5px 12px;
+  }
+  .saved-row .qualifier {
+    font-size: 10.5px; color: var(--muted); font-style: italic;
+    font-family: var(--serif); padding-left: 2px;
+    letter-spacing: 0.01em;
+  }
+
+  .saved-row .px {
+    text-align: right; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+  .saved-row .px b { color: var(--ink); font-weight: 600; }
+  .saved-row .px .delta-line {
+    display: block; font-size: 11px; margin-top: 3px; font-family: var(--serif);
+    letter-spacing: 0.01em;
+  }
+  .saved-row .px .delta-line .now { color: var(--ink); font-weight: 500; }
+  .saved-row .px .delta-line .pct.pos { color: var(--pos); font-weight: 500; }
+  .saved-row .px .delta-line .pct.neg { color: var(--neg); font-weight: 500; }
+  .saved-row .arrow { color: var(--muted); font-size: 14px; text-align: right; }
+  .saved-row:hover .arrow { color: var(--accent-2); }
+
+  /* PROTO HEADER NOTE */
+  .proto-note {
+    margin: 0 0 1.5rem; padding: 10px 14px;
+    background: rgba(30,64,175,0.06); border: 1px solid rgba(30,64,175,0.20);
+    border-radius: 6px; font-size: 12px; color: var(--accent-2);
+  }
+  .proto-note b { font-weight: 700; }
+
+</style>
+</head>
+<body data-view="report">
+<main>
+
+  <p class="proto-note">
+    <b>Prototype.</b> Click the tabs to flip between the analysis view (with the new <b>Save</b> CTA) and the saved-analyses list.
+    The Save button below the report toggles between unsaved → saved state. Mock data only.
+  </p>
+
+  <header>
+    <h1>AI Investment Co-Pilot</h1>
+    <div class="brand">invest.app</div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-pressed="true" data-view="report">Run analysis</button>
+    <button class="tab" role="tab" aria-pressed="false" data-view="saved">
+      Saved <span style="opacity:0.6; margin-left:4px; font-variant-numeric: tabular-nums;">· 8</span>
+    </button>
+  </div>
+
+  <!-- ============== REPORT VIEW ============== -->
+  <section class="view-report">
+    <form class="search-form" onsubmit="event.preventDefault(); return false;">
+      <input id="ticker-input" value="LLY" placeholder="Ticker — e.g. NVDA"
+             oninput="onTickerInput(this.value)" maxlength="8" autocomplete="off" />
+      <button class="btn btn-primary" type="submit">Run analysis</button>
+      <button class="btn btn-secondary" type="button" onclick="onLookUp()">Look up price</button>
+    </form>
+    <div class="ticker-chip" id="ticker-chip" data-state="empty"></div>
+
+    <div class="lookup-card" id="lookup-card" data-open="false">
+      <button class="lookup-close" onclick="closeLookup()" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
+      <div class="lookup-head">
+        <span class="sym" id="lu-sym">LLY</span>
+        <span class="name" id="lu-name">Eli Lilly &amp; Company</span>
+        <span class="exch" id="lu-exch">NYSE</span>
+      </div>
+      <div class="lookup-price" id="lu-price">$872.10</div>
+      <div class="lookup-delta" id="lu-delta">↑ +$2.10  +0.24%<span class="sub">today</span></div>
+      <div class="lookup-stats" id="lu-stats"></div>
+      <div class="lookup-foot" id="lu-foot">Updated 4:30 PM ET · 30 Apr 2026</div>
+    </div>
+
+    <div class="saved-indicator">
+      <span>
+        <b>Viewing saved analysis</b> · <span id="saved-indicator-when">Apr 30, 2026 · 4:12 PM</span>
+      </span>
+      <span>
+        <a onclick="document.querySelector('[data-view=saved]').click();">← Back to saved</a>
+        &nbsp;·&nbsp;
+        <a onclick="rerunFromSaved();">Re-run analysis</a>
+      </span>
+    </div>
+
+    <div class="verdict-banner" id="verdict-banner">
+      <div class="company" id="vb-company">Eli Lilly &amp; Company</div>
+      <div class="vb-pill-row">
+        <span class="pill buy" id="vb-pill">BUY · with discipline</span>
+      </div>
+      <div class="meta" id="vb-meta">NYSE: LLY · Investment Analysis · 36-Month Horizon</div>
+      <div class="verdict-line" id="vb-verdict-line">
+        Buy zone &lt;<b>$870</b> · Full position &lt;<b>$800</b> · Trim &gt;<b>$1,200</b>
+      </div>
+      <div class="stats" id="vb-stats">
+        <div><b>As-of</b><span class="num">2026-04-30</span></div>
+        <div><b>Price</b><span class="num">~$870</span></div>
+        <div><b>Market Cap</b><span class="num">~$780B</span></div>
+      </div>
+    </div>
+
+    <article class="report-body">
+      <h2>1. TL;DR — 36-Month Verdict</h2>
+      <p>BUY with discipline. Accumulate in the $750–$870 zone, full position size below $800, trim aggressively above $1,200.</p>
+      <h3>Core rationale (Macro → Moat → Valuation → Risks)</h3>
+      <p>The drug-pricing macro is genuinely worse than 18 months ago (MFN executive orders, TrumpRx.gov, IRA negotiation expanding to GLP-1s in 2027), but Lilly has the broadest, deepest, and best-executing GLP-1 franchise in the industry, with manufacturing scale and clinical-data leads that are durable through this cycle.</p>
+      <p>The moat is real (manufacturing scale + clinical data + dual-mechanism IP) but eroding at the edges (CVS preferring Wegovy on standard formulary, generic semaglutide coming, oral GLP-1 race tightening). The pullback from $1,108 ATH to $868 (-22%) creates a defensible entry. The dominant risk is terminal value — what does GLP-1 economics look like in 2030+ when MFN bites…</p>
+
+      <h3>If-Then Verdict Matrix</h3>
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Belief</th><th>Trigger</th><th>If Confirmed</th><th>If Violated</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Macro / Policy</td><td>MFN/IRA pressure compresses but doesn't crater</td><td>Q1 '26 call · 4/30/26</td><td>Hold/add</td><td>Decline &gt;-15% YoY → reduce 25%</td></tr>
+          <tr><td>Industry Structure</td><td>Obesity TAM expands faster than price erosion</td><td>2026 Zep+Foundayo combined ≥ $30B</td><td>Hold/add</td><td>&lt;$25B → reassess thesis</td></tr>
+          <tr><td>Demand / Pricing</td><td>Lilly maintains &gt;55% U.S. obesity branded share</td><td>Q2/Q3 '26 IQVIA scripts</td><td>Hold</td><td>Share &lt;50% by Q4 → reduce</td></tr>
+          <tr><td>Competition</td><td>Retatrutide preserves efficacy lead</td><td>Phase 3 readout late '26</td><td>Aggressive add</td><td>Inferior to CagriSema → reduce 25%</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:12.5px; color:var(--muted); font-style:italic;">…sections 2–9 truncated for prototype…</p>
+    </article>
+
+    <!-- SAVE CTA ZONE — sits below the report, prominent but not in the header -->
+    <div class="save-zone">
+      <div class="text">
+        Want to come back to this later? <b>Save it.</b> You can compare against future runs side-by-side.
+      </div>
+      <button class="btn btn-secondary save-cta" id="save-btn" onclick="toggleSave()">Save analysis</button>
+    </div>
+  </section>
+
+  <!-- ============== SAVED VIEW ============== -->
+  <section class="view-saved">
+    <div class="saved-head">
+      <div style="display:flex; align-items: baseline; justify-content: space-between; gap: 16px;">
+        <div>
+          <h2>Saved analyses</h2>
+          <p class="count"><b>8</b> reports across <b>4</b> tickers · newest first</p>
+        </div>
+        <button class="btn btn-ghost" id="expand-all-btn" onclick="toggleAll()" style="font-size: 11.5px; padding: 6px 10px;">Expand all</button>
+      </div>
+    </div>
+
+    <div id="ticker-groups">
+      <!-- Populated by JS from MOCK_DATA below — keeps the prototype dry. -->
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+  // ---------- MOCK DATA ----------
+  const TRASH_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+  const CHEV_SVG  = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+
+  // Stub quote data — in real impl this comes from Yahoo/Finnhub server-side.
+  const MOCK_QUOTES = {
+    LLY:  { name: 'Eli Lilly & Company',     price: 872.10,  prevClose: 870.00,  dayLow: 865.00, dayHigh: 874.00, w52Low: 740.00, w52High: 1108.00, volume: 1234567,  marketCap: '$782B',  exchange: 'NYSE',   currency: 'USD' },
+    NVDA: { name: 'NVIDIA Corporation',      price: 215.50,  prevClose: 213.17,  dayLow: 213.00, dayHigh: 216.40, w52Low: 102.00, w52High: 220.00,  volume: 245000000, marketCap: '$5.23T', exchange: 'NASDAQ', currency: 'USD' },
+    ENS:  { name: 'EnerSys',                 price: 208.30,  prevClose: 205.96,  dayLow: 205.50, dayHigh: 209.00, w52Low:  89.00, w52High: 280.00,  volume: 567000,   marketCap: '$7.7B',  exchange: 'NYSE',   currency: 'USD' },
+    TSLA: { name: 'Tesla, Inc.',             price: 331.20,  prevClose: 328.00,  dayLow: 327.00, dayHigh: 333.00, w52Low: 195.00, w52High: 488.00,  volume: 89000000, marketCap: '$1.05T', exchange: 'NASDAQ', currency: 'USD' },
+    AAPL: { name: 'Apple Inc.',              price: 271.50,  prevClose: 270.71,  dayLow: 270.00, dayHigh: 272.50, w52Low: 195.00, w52High: 282.00,  volume: 45000000, marketCap: '$3.99T', exchange: 'NASDAQ', currency: 'USD' },
+    MSFT: { name: 'Microsoft Corporation',   price: 482.05,  prevClose: 484.20,  dayLow: 480.00, dayHigh: 486.00, w52Low: 380.00, w52High: 510.00,  volume: 18000000, marketCap: '$3.58T', exchange: 'NASDAQ', currency: 'USD' },
+    GOOGL:{ name: 'Alphabet Inc. Class A',   price: 351.20,  prevClose: 349.78,  dayLow: 348.50, dayHigh: 353.00, w52Low: 165.00, w52High: 360.00,  volume: 22000000, marketCap: '$4.32T', exchange: 'NASDAQ', currency: 'USD' },
+    SNDK: { name: 'Sandisk Corporation',     price: 998.40,  prevClose: 1002.35, dayLow: 990.00, dayHigh: 1005.00,w52Low: 145.00, w52High: 1050.00, volume: 4200000,  marketCap: '$147B',  exchange: 'NASDAQ', currency: 'USD' },
+    WDC:  { name: 'Western Digital Corp',    price: 388.10,  prevClose: 390.99,  dayLow: 386.00, dayHigh: 392.00, w52Low:  60.00, w52High: 405.00,  volume: 8000000,  marketCap: '$132B',  exchange: 'NASDAQ', currency: 'USD' },
+    NXT:  { name: 'Nextracker Inc.',         price: 119.40,  prevClose: 116.54,  dayLow: 115.80, dayHigh: 120.10, w52Low:  38.00, w52High: 145.00,  volume: 5500000,  marketCap: '$16.3B', exchange: 'NASDAQ', currency: 'USD' },
+    NTLA: { name: 'Intellia Therapeutics',   price: 14.80,   prevClose: 13.20,   dayLow: 13.30,  dayHigh: 15.10,  w52Low:   8.00, w52High:  35.00,  volume: 18000000, marketCap: '$1.75B', exchange: 'NASDAQ', currency: 'USD' },
+  };
+
+  function getQuote(ticker) {
+    if (!ticker) return null;
+    const t = ticker.toUpperCase();
+    return MOCK_QUOTES[t] || null;
+  }
+  function fmtNum(n) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function fmtVol(n) {
+    if (n >= 1e9) return (n/1e9).toFixed(2)+'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+    return String(n);
+  }
+  function deltaPct(prev, curr) { return ((curr - prev) / prev) * 100; }
+  function fmtDelta(prev, curr) {
+    const d = curr - prev, p = deltaPct(prev, curr);
+    const sign = d >= 0 ? '+' : '−';
+    const absD = Math.abs(d), absP = Math.abs(p);
+    return { sign, abs: '$' + fmtNum(absD), pct: sign + absP.toFixed(2) + '%', isPos: d >= 0 };
+  }
+
+  const MOCK_DATA = {
+    LLY: {
+      ticker: 'LLY', name: 'Eli Lilly & Company',
+      analyses: [
+        { id: 'lly-apr30', whenLong: 'Apr 30, 2026', timeStr: '4:12 PM', whenRel: 'today',
+          verdictLabel: 'Buy', verdictPill: 'buy', qualifier: 'with discipline',
+          price: '$870', mcap: '$780B',
+          banner: { company: 'Eli Lilly & Company',
+            meta: 'NYSE: LLY · Investment Analysis · 36-Month Horizon',
+            pillClass: 'buy', pillText: 'BUY · with discipline',
+            verdictLine: 'Buy zone &lt;<b>$870</b> · Full position &lt;<b>$800</b> · Trim &gt;<b>$1,200</b>',
+            stats: [['As-of','2026-04-30'], ['Price','~$870'], ['Market Cap','~$780B']] }},
+        { id: 'lly-mar22', whenLong: 'Mar 22, 2026', timeStr: '9:08 AM', whenRel: '5w ago',
+          verdictLabel: 'Hold', verdictPill: 'hold', qualifier: '',
+          price: '$1,015', mcap: '$910B',
+          banner: { company: 'Eli Lilly & Company',
+            meta: 'NYSE: LLY · Investment Analysis · 36-Month Horizon',
+            pillClass: 'hold', pillText: 'HOLD',
+            verdictLine: 'Hold range <b>$950–$1,100</b> · Trim &gt;<b>$1,200</b>',
+            stats: [['As-of','2026-03-22'], ['Price','~$1,015'], ['Market Cap','~$910B']] }},
+        { id: 'lly-jan14', whenLong: 'Jan 14, 2026', timeStr: '11:30 AM', whenRel: '15w ago',
+          verdictLabel: 'Buy', verdictPill: 'buy', qualifier: '',
+          price: '$945', mcap: '$850B',
+          banner: { company: 'Eli Lilly & Company',
+            meta: 'NYSE: LLY · Investment Analysis · 36-Month Horizon',
+            pillClass: 'buy', pillText: 'BUY',
+            verdictLine: 'Buy zone &lt;<b>$960</b> · Trim &gt;<b>$1,250</b>',
+            stats: [['As-of','2026-01-14'], ['Price','~$945'], ['Market Cap','~$850B']] }},
+      ],
+    },
+    NVDA: {
+      ticker: 'NVDA', name: 'NVIDIA Corp',
+      analyses: [
+        { id: 'nvda-apr28', whenLong: 'Apr 28, 2026', timeStr: '10:15 AM', whenRel: '2d ago',
+          verdictLabel: 'Expand', verdictPill: 'expand', qualifier: '',
+          price: '$213', mcap: '$5.18T',
+          banner: { company: 'NVIDIA Corporation',
+            meta: 'NASDAQ: NVDA · Investment Analysis · 36-Month Horizon',
+            pillClass: 'expand', pillText: 'EXPAND',
+            verdictLine: 'Add zone &lt;<b>$220</b> · Full position &lt;<b>$200</b> · Trim &gt;<b>$280</b>',
+            stats: [['As-of','2026-04-28'], ['Price','~$213'], ['Market Cap','~$5.18T']] }},
+        { id: 'nvda-feb12', whenLong: 'Feb 12, 2026', timeStr: '2:48 PM', whenRel: '11w ago',
+          verdictLabel: 'Expand', verdictPill: 'expand', qualifier: '',
+          price: '$187', mcap: '$4.55T',
+          banner: { company: 'NVIDIA Corporation',
+            meta: 'NASDAQ: NVDA · Investment Analysis · 36-Month Horizon',
+            pillClass: 'expand', pillText: 'EXPAND',
+            verdictLine: 'Add zone &lt;<b>$195</b> · Trim &gt;<b>$260</b>',
+            stats: [['As-of','2026-02-12'], ['Price','~$187'], ['Market Cap','~$4.55T']] }},
+      ],
+    },
+    ENS: {
+      ticker: 'ENS', name: 'EnerSys',
+      analyses: [
+        { id: 'ens-apr29', whenLong: 'Apr 29, 2026', timeStr: '3:55 PM', whenRel: 'yesterday',
+          verdictLabel: 'Reduce', verdictPill: 'reduce', qualifier: '',
+          price: '$206', mcap: '$7.6B',
+          banner: { company: 'EnerSys',
+            meta: 'NYSE: ENS · Investment Analysis · 36-Month Horizon',
+            pillClass: 'reduce', pillText: 'REDUCE',
+            verdictLine: 'Trim into <b>$210+</b> · Avoid adding below <b>$190</b>',
+            stats: [['As-of','2026-04-29'], ['Price','~$206'], ['Market Cap','~$7.6B']] }},
+        { id: 'ens-mar05', whenLong: 'Mar 05, 2026', timeStr: '8:20 AM', whenRel: '8w ago',
+          verdictLabel: 'Hold', verdictPill: 'hold', qualifier: '',
+          price: '$189', mcap: '$7.0B',
+          banner: { company: 'EnerSys',
+            meta: 'NYSE: ENS · Investment Analysis · 36-Month Horizon',
+            pillClass: 'hold', pillText: 'HOLD',
+            verdictLine: 'Hold range <b>$180–$210</b>',
+            stats: [['As-of','2026-03-05'], ['Price','~$189'], ['Market Cap','~$7.0B']] }},
+      ],
+    },
+    TSLA: {
+      ticker: 'TSLA', name: 'Tesla, Inc.',
+      analyses: [
+        { id: 'tsla-apr11', whenLong: 'Apr 11, 2026', timeStr: '1:40 PM', whenRel: '3w ago',
+          verdictLabel: 'Hold', verdictPill: 'hold', qualifier: '',
+          price: '$328', mcap: '$1.04T',
+          banner: { company: 'Tesla, Inc.',
+            meta: 'NASDAQ: TSLA · Investment Analysis · 36-Month Horizon',
+            pillClass: 'hold', pillText: 'HOLD',
+            verdictLine: 'Hold range <b>$300–$360</b>',
+            stats: [['As-of','2026-04-11'], ['Price','~$328'], ['Market Cap','~$1.04T']] }},
+      ],
+    },
+  };
+
+  // ---------- RENDER ----------
+  function renderSavedList() {
+    const root = document.getElementById('ticker-groups');
+    const tickers = Object.values(MOCK_DATA).filter(t => t.analyses.length > 0);
+    // Sort tickers by most recent saved analysis
+    tickers.sort((a, b) => (a.analyses[0].whenLong < b.analyses[0].whenLong ? 1 : -1));
+    root.innerHTML = tickers.map(t => `
+      <div class="ticker-group" data-open="false" data-ticker="${t.ticker}">
+        <div class="ticker-head" onclick="toggleGroup(this, event)">
+          <span class="sym">${t.ticker}</span>
+          <span class="name">${t.name}</span>
+          <span class="toggle">
+            <button class="icon-btn" title="Delete all saved for ${t.ticker}"
+                    onclick="askDeleteTicker(event, '${t.ticker}')">${TRASH_SVG}</button>
+            <span>${t.analyses.length}</span>
+            <span class="chev" aria-hidden="true">${CHEV_SVG}</span>
+          </span>
+          <div class="confirm-bar">
+            <span class="msg">Delete all <b>${t.analyses.length}</b> saved analyses for <b>${t.ticker}</b>?</span>
+            <span class="actions">
+              <button onclick="cancelDelete(event, this)">Cancel</button>
+              <button class="danger" onclick="confirmDeleteTicker(event, '${t.ticker}')">Delete</button>
+            </span>
+          </div>
+        </div>
+        <div class="ticker-list">
+          ${t.analyses.map(a => {
+            // Compute current vs saved-at delta
+            const q = getQuote(t.ticker);
+            const savedAt = parseFloat(a.price.replace(/[$,]/g, ''));
+            let deltaHtml = '';
+            if (q && !isNaN(savedAt)) {
+              const d = fmtDelta(savedAt, q.price);
+              const cls = d.isPos ? 'pos' : 'neg';
+              const arrow = d.isPos ? '↑' : '↓';
+              deltaHtml = `<span class="delta-line">now <span class="now">$${fmtNum(q.price)}</span> <span class="pct ${cls}">${arrow} ${d.pct}</span></span>`;
+            }
+            return `
+            <div class="saved-row" data-id="${a.id}" onclick="loadSaved('${a.id}', event)">
+              <div class="when">${a.whenLong}<small>${a.timeStr} · ${a.whenRel}</small></div>
+              <div class="verdict-cell">
+                <span class="pill ${a.verdictPill}">${a.verdictLabel}</span>
+                ${a.qualifier ? `<span class="qualifier">${a.qualifier}</span>` : ''}
+              </div>
+              <div class="px">
+                <span>saved at <b>${a.price}</b></span>
+                ${deltaHtml}
+              </div>
+              <button class="icon-btn" title="Delete this analysis"
+                      onclick="askDeleteAnalysis(event, '${t.ticker}', '${a.id}')">${TRASH_SVG}</button>
+              <div class="confirm-bar">
+                <span class="msg">Delete the <b>${a.whenLong}</b> analysis for <b>${t.ticker}</b>?</span>
+                <span class="actions">
+                  <button onclick="cancelDelete(event, this)">Cancel</button>
+                  <button class="danger" onclick="confirmDeleteAnalysis(event, '${t.ticker}', '${a.id}')">Delete</button>
+                </span>
+              </div>
+            </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+    updateCounts();
+  }
+
+  function updateCounts() {
+    const total = Object.values(MOCK_DATA).reduce((sum, t) => sum + t.analyses.length, 0);
+    const tickerCount = Object.values(MOCK_DATA).filter(t => t.analyses.length > 0).length;
+    document.querySelector('.tab[data-view="saved"] span').textContent = `· ${total}`;
+    const cnt = document.querySelector('.saved-head .count');
+    if (cnt) cnt.innerHTML = `<b>${total}</b> reports across <b>${tickerCount}</b> tickers · newest first`;
+  }
+
+  // ---------- TABS ----------
+  document.querySelectorAll('.tab').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', 'true');
+      document.body.dataset.view = b.dataset.view;
+      // Returning to saved list → leave saved-view mode
+      if (b.dataset.view === 'saved') document.body.dataset.mode = '';
+    });
+  });
+
+  // ---------- EXPAND / COLLAPSE ----------
+  function toggleGroup(headEl, e) {
+    if (e && e.target.closest('.icon-btn, .confirm-bar')) return; // don't collapse on inner clicks
+    const grp = headEl.closest('.ticker-group');
+    if (grp.dataset.confirm === 'true') return;
+    grp.dataset.open = grp.dataset.open === 'true' ? 'false' : 'true';
+  }
+  function toggleAll() {
+    const groups = document.querySelectorAll('.ticker-group');
+    const anyClosed = Array.from(groups).some(g => g.dataset.open !== 'true');
+    groups.forEach(g => { g.dataset.open = anyClosed ? 'true' : 'false'; });
+    document.getElementById('expand-all-btn').textContent = anyClosed ? 'Collapse all' : 'Expand all';
+  }
+
+  // ---------- DELETE: confirm-then-act ----------
+  function askDeleteAnalysis(e, ticker, id) {
+    e.stopPropagation();
+    const row = document.querySelector(`.saved-row[data-id="${id}"]`);
+    row.dataset.confirm = 'true';
+  }
+  function confirmDeleteAnalysis(e, ticker, id) {
+    e.stopPropagation();
+    const row = document.querySelector(`.saved-row[data-id="${id}"]`);
+    row.classList.add('removed');
+    setTimeout(() => {
+      MOCK_DATA[ticker].analyses = MOCK_DATA[ticker].analyses.filter(a => a.id !== id);
+      // If this was the last one in the ticker, drop the whole ticker too
+      if (MOCK_DATA[ticker].analyses.length === 0) delete MOCK_DATA[ticker];
+      renderSavedList();
+    }, 220);
+  }
+  function askDeleteTicker(e, ticker) {
+    e.stopPropagation();
+    const grp = document.querySelector(`.ticker-group[data-ticker="${ticker}"]`);
+    grp.dataset.confirm = 'true';
+  }
+  function confirmDeleteTicker(e, ticker) {
+    e.stopPropagation();
+    const grp = document.querySelector(`.ticker-group[data-ticker="${ticker}"]`);
+    grp.classList.add('removed');
+    setTimeout(() => {
+      delete MOCK_DATA[ticker];
+      renderSavedList();
+    }, 250);
+  }
+  function cancelDelete(e, btn) {
+    e.stopPropagation();
+    const row = btn.closest('.saved-row');
+    const grp = btn.closest('.ticker-group');
+    if (row) row.dataset.confirm = 'false';
+    else if (grp) grp.dataset.confirm = 'false';
+  }
+
+  // ---------- LOAD SAVED ANALYSIS INTO REPORT VIEW ----------
+  function loadSaved(id, e) {
+    if (e && e.target.closest('.icon-btn, .confirm-bar')) return;
+    let target = null;
+    for (const t of Object.values(MOCK_DATA)) {
+      const a = t.analyses.find(x => x.id === id);
+      if (a) { target = a; break; }
+    }
+    if (!target) return;
+
+    // Populate the verdict banner
+    const b = target.banner;
+    document.getElementById('vb-company').textContent = b.company;
+    document.getElementById('vb-meta').textContent = b.meta;
+    const pill = document.getElementById('vb-pill');
+    pill.className = 'pill ' + b.pillClass;
+    pill.textContent = b.pillText;
+    document.getElementById('vb-verdict-line').innerHTML = b.verdictLine;
+    document.getElementById('vb-stats').innerHTML = b.stats
+      .map(([k,v]) => `<div><b>${k}</b><span class="num">${v}</span></div>`).join('');
+
+    // Update saved-indicator timestamp
+    document.getElementById('saved-indicator-when').textContent =
+      `${target.whenLong} · ${target.timeStr}`;
+
+    // Switch to report view + saved-view mode
+    document.body.dataset.mode = 'saved-view';
+    document.querySelector('.tab[data-view="report"]').click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function rerunFromSaved() {
+    document.body.dataset.mode = '';
+    // In a real implementation this would kick off a fresh /api/analyze run.
+    // For the prototype we just reset the indicator state.
+  }
+
+  // ---------- TICKER VALIDATION CHIP (under search bar) ----------
+  let _tickerTimer = null;
+  function onTickerInput(raw) {
+    const v = (raw || '').trim().toUpperCase();
+    document.getElementById('ticker-input').value = v;
+    const chip = document.getElementById('ticker-chip');
+    if (!v) { chip.dataset.state = 'empty'; chip.innerHTML = ''; return; }
+    chip.dataset.state = 'loading';
+    chip.innerHTML = '<span class="spin"></span><span>Looking up ' + v + '…</span>';
+    clearTimeout(_tickerTimer);
+    _tickerTimer = setTimeout(() => paintChip(v), 350);
+  }
+  function paintChip(ticker) {
+    const chip = document.getElementById('ticker-chip');
+    const q = getQuote(ticker);
+    if (!q) {
+      chip.dataset.state = 'invalid';
+      chip.innerHTML = '<span>No quote for <b>' + ticker + '</b> · check the symbol or try another exchange.</span>';
+      return;
+    }
+    const d = fmtDelta(q.prevClose, q.price);
+    const arrow = d.isPos ? '↑' : '↓';
+    chip.dataset.state = 'valid';
+    chip.innerHTML = `
+      <span class="sym">${ticker}</span>
+      <span class="name">${q.name}</span>
+      <span class="exch">${q.exchange}</span>
+      <span class="px">$${fmtNum(q.price)}</span>
+      <span class="delta ${d.isPos ? 'pos' : 'neg'}">${arrow} ${d.pct}</span>
+    `;
+  }
+
+  // ---------- LOOK UP PRICE CARD ----------
+  function onLookUp() {
+    const v = document.getElementById('ticker-input').value.trim().toUpperCase();
+    if (!v) return;
+    const q = getQuote(v);
+    const card = document.getElementById('lookup-card');
+    if (!q) {
+      card.dataset.open = 'true';
+      card.innerHTML = `
+        <button class="lookup-close" onclick="closeLookup()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+        <div class="lookup-head"><span class="sym">${v}</span><span class="name">Quote not found in this prototype</span></div>
+        <p style="color: var(--muted); font-style: italic; margin-top: 12px;">Real implementation will fetch from Yahoo Finance / Finnhub for any valid ticker.</p>
+      `;
+      return;
+    }
+    const d = fmtDelta(q.prevClose, q.price);
+    const arrow = d.isPos ? '↑' : '↓';
+    card.dataset.open = 'true';
+    document.getElementById('lu-sym').textContent = v;
+    document.getElementById('lu-name').textContent = q.name;
+    document.getElementById('lu-exch').textContent = q.exchange;
+    document.getElementById('lu-price').textContent = '$' + fmtNum(q.price);
+    const deltaEl = document.getElementById('lu-delta');
+    deltaEl.className = 'lookup-delta ' + (d.isPos ? 'pos' : 'neg');
+    deltaEl.innerHTML = `${arrow} ${d.sign}${d.abs}  ${d.pct}<span class="sub">today</span>`;
+    document.getElementById('lu-stats').innerHTML = `
+      <div class="cell"><div class="lbl">Prev Close</div><div class="val">$${fmtNum(q.prevClose)}</div></div>
+      <div class="cell"><div class="lbl">Day Range</div><div class="val">$${fmtNum(q.dayLow)} – $${fmtNum(q.dayHigh)}</div></div>
+      <div class="cell"><div class="lbl">52W Range</div><div class="val">$${fmtNum(q.w52Low)} – $${fmtNum(q.w52High)}</div></div>
+      <div class="cell"><div class="lbl">Volume</div><div class="val">${fmtVol(q.volume)}</div></div>
+      <div class="cell"><div class="lbl">Market Cap</div><div class="val">${q.marketCap}</div></div>
+      <div class="cell"><div class="lbl">Currency</div><div class="val">${q.currency}</div></div>
+    `;
+    const now = new Date();
+    document.getElementById('lu-foot').textContent =
+      'Updated ' + now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) +
+      ' · ' + now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+      ' · Yahoo Finance';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function closeLookup() {
+    document.getElementById('lookup-card').dataset.open = 'false';
+  }
+
+  // ---------- SAVE BUTTON ----------
+  function toggleSave() {
+    const btn = document.getElementById('save-btn');
+    if (btn.classList.contains('saved')) {
+      btn.classList.remove('saved');
+      btn.textContent = 'Save analysis';
+    } else {
+      btn.classList.add('saved');
+      const now = new Date();
+      const t = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      btn.textContent = `Saved · ${t}`;
+    }
+  }
+
+  // ---------- INIT ----------
+  renderSavedList();
+</script>
+</body>
+</html>
