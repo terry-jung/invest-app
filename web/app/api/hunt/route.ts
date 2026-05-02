@@ -44,6 +44,10 @@ export async function POST(req: Request) {
         // Uses CLI alias so it auto-resolves to whatever Opus is current.
         // Override with HUNTER_MODEL=sonnet (or a full name) if you want to A/B.
         model: process.env.HUNTER_MODEL || "opus",
+        // Railway: explicit binary path (see analyze/route.ts comment).
+        ...(process.env.CLAUDE_CODE_EXECUTABLE
+          ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE }
+          : {}),
       },
     })) {
       if (req.signal?.aborted) {

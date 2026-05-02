@@ -225,6 +225,14 @@ QUALITY BAR
             // Pinned to Opus for the highest-quality analysis.
             // Override with ANALYZE_MODEL=sonnet in .env.local for cost-conscious runs.
             model: process.env.ANALYZE_MODEL || "opus",
+            // On Railway we ship the native CLI as a separate tarball at a
+            // known path (see nixpacks.toml) because npm's optional-dep
+            // resolution refuses to install Linux binaries on Railway's
+            // build container. Falls back to the SDK's normal resolution
+            // when the env var isn't set (local dev).
+            ...(process.env.CLAUDE_CODE_EXECUTABLE
+              ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE }
+              : {}),
           },
         })) {
           if (canceled) break;

@@ -74,6 +74,10 @@ export async function POST(req: NextRequest) {
             // Sonnet by default — Q&A is light reasoning, no need for Opus cost.
             // Override with ASK_MODEL=opus in .env.local if desired.
             model: process.env.ASK_MODEL || "sonnet",
+            // Railway: explicit binary path (see analyze/route.ts comment).
+            ...(process.env.CLAUDE_CODE_EXECUTABLE
+              ? { pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE }
+              : {}),
           },
         })) {
           if (canceled) break;

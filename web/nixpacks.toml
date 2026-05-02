@@ -17,13 +17,26 @@
 cmds = [
   "rm -f package-lock.json",
   "npm install --include=optional",
-  # Belt-and-suspenders: even with --include=optional, npm has been
-  # silently skipping the Linux native binaries for both Tailwind v4 and
-  # the Claude Agent SDK (npm/cli#4828). Force-install them as direct
-  # add-ons so they land in node_modules unconditionally. --no-save
-  # keeps package.json untouched.
-  "npm install --no-save @tailwindcss/oxide-linux-x64-gnu@latest @anthropic-ai/claude-agent-sdk-linux-x64@latest",
-  # Print contents so future build logs surface install state at a glance.
-  "echo '=== node_modules/@anthropic-ai/ ===' && ls -la node_modules/@anthropic-ai/ || true",
-  "echo '=== node_modules/@tailwindcss/ ===' && ls -la node_modules/@tailwindcss/ || true",
+  # Belt-and-suspenders: even with --include=optional, npm keeps silently
+  # skipping the Linux native binaries for @tailwindcss/oxide and the
+  # Claude Agent SDK on Railway (npm/cli#4828, made worse by npm's strict
+  # os/cpu constraint handling). Direct install with --no-save normally
+  # works but isn't reliable across Nixpacks build cache states.
+  #
+  # Most-deterministic fallback: `npm pack` downloads the tarball with
+  # ZERO platform-constraint enforcement, then we manually extract the
+  # `claude` binary into a stable known path. We then point the SDK at
+  # it via the CLAUDE_CODE_EXECUTABLE env var read in our route handlers.
+  "npm install --no-save @tailwindcss/oxide-linux-x64-gnu@latest || true",
+  "mkdir -p /app/bin",
+  "cd /app/bin && npm pack @anthropic-ai/claude-agent-sdk-linux-x64@latest && tar xzf anthropic-ai-claude-agent-sdk-linux-x64-*.tgz && chmod +x package/claude && mv package claude-cli",
+  "echo '=== /app/bin contents ===' && ls -la /app/bin/claude-cli/ || true",
+  "echo '=== node_modules/@anthropic-ai/ ===' && ls node_modules/@anthropic-ai/ || true",
+  "echo '=== node_modules/@tailwindcss/ ===' && ls node_modules/@tailwindcss/ || true",
 ]
+
+# CLAUDE_CODE_EXECUTABLE points the SDK at the binary we extracted via
+# npm pack. Read by our route handlers and passed as
+# `pathToClaudeCodeExecutable` to the SDK's query() options.
+[variables]
+CLAUDE_CODE_EXECUTABLE = "/app/bin/claude-cli/claude"
