@@ -17,4 +17,13 @@
 cmds = [
   "rm -f package-lock.json",
   "npm install --include=optional",
+  # Belt-and-suspenders: even with --include=optional, npm has been
+  # silently skipping the Linux native binaries for both Tailwind v4 and
+  # the Claude Agent SDK (npm/cli#4828). Force-install them as direct
+  # add-ons so they land in node_modules unconditionally. --no-save
+  # keeps package.json untouched.
+  "npm install --no-save @tailwindcss/oxide-linux-x64-gnu@latest @anthropic-ai/claude-agent-sdk-linux-x64@latest",
+  # Print contents so future build logs surface install state at a glance.
+  "echo '=== node_modules/@anthropic-ai/ ===' && ls -la node_modules/@anthropic-ai/ || true",
+  "echo '=== node_modules/@tailwindcss/ ===' && ls -la node_modules/@tailwindcss/ || true",
 ]
