@@ -281,6 +281,7 @@ QUALITY BAR
         controller.close();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
+        console.error("[analyze] SDK error:", err);
         send({ type: "error", text: msg });
         controller.close();
       }

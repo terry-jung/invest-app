@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
         controller.close();
       } catch (err: unknown) {
         const m = err instanceof Error ? err.message : String(err);
+        console.error("[ask] SDK error:", err);
         send({ type: "error", text: m });
         controller.close();
       }

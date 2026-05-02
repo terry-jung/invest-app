@@ -67,6 +67,7 @@ export async function POST(req: Request) {
     }
   } catch (err: unknown) {
     const m = err instanceof Error ? err.message : String(err);
+    console.error("[hunt] SDK error:", err);
     return Response.json({ error: m }, { status: 500 });
   }
 
