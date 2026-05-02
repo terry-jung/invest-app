@@ -15,7 +15,8 @@ cmds = [
   # npm has historically dropped on Linux even with --include=optional.
   "npm install --no-save @tailwindcss/oxide-linux-x64-gnu@latest || true",
   "echo '=== node_modules/@anthropic-ai/ ===' && ls node_modules/@anthropic-ai/ || true",
-  "echo '=== claude-code cli ===' && ls -la node_modules/@anthropic-ai/claude-code/cli.js || true",
+  "echo '=== claude-code package ===' && ls -la node_modules/@anthropic-ai/claude-code/ || true",
+  "echo '=== .bin/claude ===' && ls -la node_modules/.bin/claude || true",
 ]
 
 # Pointed at the JS entrypoint of @anthropic-ai/claude-code. The SDK's
@@ -26,5 +27,5 @@ cmds = [
 # `~/.claude/` config + cache files. Railway containers' default HOME
 # may not be writable depending on the user the app runs as.
 [variables]
-CLAUDE_CODE_EXECUTABLE = "/app/node_modules/@anthropic-ai/claude-code/cli.js"
+CLAUDE_CODE_EXECUTABLE = "/app/node_modules/.bin/claude"
 HOME = "/tmp"
