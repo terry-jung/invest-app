@@ -690,6 +690,24 @@ export default function Page() {
     // `pages` on completion regardless of stale closure values for `report`.
     let accumulator = "";
 
+    // Hold a Screen Wake Lock for the duration of the run so the iPhone
+    // doesn't auto-lock and kill the SSE mid-analysis. iOS releases the
+    // lock on tab-switch, so re-acquire on visibilitychange.
+    type WakeLockSentinel = { release: () => Promise<void> };
+    let wakeLock: WakeLockSentinel | null = null;
+    const acquireWakeLock = async () => {
+      if (typeof document === "undefined" || document.visibilityState !== "visible") return;
+      const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> } };
+      if (!nav.wakeLock) return;
+      try { wakeLock = await nav.wakeLock.request("screen"); }
+      catch { /* unsupported, denied, or low-power mode — fail silently */ }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !wakeLock) void acquireWakeLock();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    void acquireWakeLock();
+
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (userApiKeyRef.current) headers["x-anthropic-key"] = userApiKeyRef.current;
@@ -765,6 +783,9 @@ export default function Page() {
         setRunState("error");
       }
     } finally {
+      document.removeEventListener("visibilitychange", onVisibility);
+      try { await wakeLock?.release(); } catch { /* ignore */ }
+      wakeLock = null;
       setCurrentTicker(null);
     }
 
