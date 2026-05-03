@@ -693,17 +693,20 @@ export default function Page() {
     // Hold a Screen Wake Lock for the duration of the run so the iPhone
     // doesn't auto-lock and kill the SSE mid-analysis. iOS releases the
     // lock on tab-switch, so re-acquire on visibilitychange.
+    // Stored in a ref-style object because TS doesn't narrow object
+    // property types across closure assignments — a plain `let` here
+    // gets narrowed to `null` and then `release()` fails to type-check.
     type WakeLockSentinel = { release: () => Promise<void> };
-    let wakeLock: WakeLockSentinel | null = null;
+    const wakeLock: { current: WakeLockSentinel | null } = { current: null };
     const acquireWakeLock = async () => {
       if (typeof document === "undefined" || document.visibilityState !== "visible") return;
       const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> } };
       if (!nav.wakeLock) return;
-      try { wakeLock = await nav.wakeLock.request("screen"); }
+      try { wakeLock.current = await nav.wakeLock.request("screen"); }
       catch { /* unsupported, denied, or low-power mode — fail silently */ }
     };
     const onVisibility = () => {
-      if (document.visibilityState === "visible" && !wakeLock) void acquireWakeLock();
+      if (document.visibilityState === "visible" && !wakeLock.current) void acquireWakeLock();
     };
     document.addEventListener("visibilitychange", onVisibility);
     void acquireWakeLock();
@@ -784,8 +787,8 @@ export default function Page() {
       }
     } finally {
       document.removeEventListener("visibilitychange", onVisibility);
-      try { await wakeLock?.release(); } catch { /* ignore */ }
-      wakeLock = null;
+      try { await wakeLock.current?.release(); } catch { /* ignore */ }
+      wakeLock.current = null;
       setCurrentTicker(null);
     }
 
