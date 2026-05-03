@@ -61,10 +61,16 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const encoder = new TextEncoder();
       let canceled = false;
+      let closed = false;
       const send = (evt: Evt) => {
         if (canceled) return;
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`)); }
         catch { canceled = true; }
+      };
+      const safeClose = () => {
+        if (closed) return;
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
       };
       try {
         for await (const message of query({
@@ -95,17 +101,17 @@ export async function POST(req: NextRequest) {
             const r = message as { is_error?: boolean; result?: string };
             if (r.is_error) send({ type: "error", text: r.result || "Agent reported an error." });
             send({ type: "done" });
-            controller.close();
+            safeClose();
             return;
           }
         }
         send({ type: "done" });
-        controller.close();
+        safeClose();
       } catch (err: unknown) {
         const m = err instanceof Error ? err.message : String(err);
         console.error("[ask] SDK error:", err);
         send({ type: "error", text: m });
-        controller.close();
+        safeClose();
       }
     },
   });

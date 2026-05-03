@@ -47,10 +47,21 @@ export async function POST(req: NextRequest) {
       // We deliberately do NOT subscribe to req.signal — Next.js dev fires it
       // spuriously and ends the stream before the agent ever produces output.
       let canceled = false;
+      let closed = false;
       const send = (evt: Evt) => {
         if (canceled) return;
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`)); }
         catch { canceled = true; }
+      };
+      // Guard against double-close: when the client disconnects mid-stream,
+      // the runtime closes the controller. A subsequent close() throws
+      // ERR_INVALID_STATE, which then falls into the catch block that
+      // tries to close again — chain reaction. closed-flag + try/catch
+      // makes close idempotent.
+      const safeClose = () => {
+        if (closed) return;
+        closed = true;
+        try { controller.close(); } catch { /* already closed */ }
       };
 
       try {
@@ -272,18 +283,18 @@ QUALITY BAR
               send({ type: "delta", text: r.result });
             }
             send({ type: "done" });
-            controller.close();
+            safeClose();
             return;
           }
         }
 
         send({ type: "done" });
-        controller.close();
+        safeClose();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[analyze] SDK error:", err);
         send({ type: "error", text: msg });
-        controller.close();
+        safeClose();
       }
     },
   });
