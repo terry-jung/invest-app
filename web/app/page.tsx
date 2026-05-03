@@ -893,6 +893,9 @@ export default function Page() {
     const reportMd = inSavedDetail
       ? savedMode!.body
       : (targetPage ? targetPage.body : displayedReport);
+    const tickerForQA = inSavedDetail
+      ? (savedMode!.ticker ?? "")
+      : (targetPage ? targetPage.ticker : (currentTicker ?? ""));
     if (!reportMd) return;
 
     setAskLoading(true);
@@ -929,6 +932,7 @@ export default function Page() {
           report: reportMd,
           question: q,
           history: historyForRequest,
+          ticker: tickerForQA,
         }),
         signal: ctrl.signal,
       });
@@ -2108,7 +2112,7 @@ function AskPanel({
     <div className="ask-panel">
       <div className="ask-head">
         <span className="ask-title">Ask follow-ups about {ticker || "this report"}</span>
-        <span className="ask-sub">Questions are scoped to this analysis only.</span>
+        <span className="ask-sub">Scoped to {ticker || "this ticker"} — pressure-tested with web search.</span>
       </div>
       {messages.length > 0 && (
         <div className="ask-thread">

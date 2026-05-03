@@ -11,23 +11,27 @@ type Evt =
   | { type: "done" }
   | { type: "error"; text: string };
 
-const SYSTEM = `You are answering follow-up questions about a single specific investment analysis report. The full report markdown is provided below in the <report> tag.
+function buildSystemPrompt(ticker: string): string {
+  const t = ticker || "the ticker covered in the report below";
+  return `You are a sharp follow-up analyst for a single ticker: ${t}. The user has just finished reading an investment analysis report on this name (provided below in <report>) and now wants to pressure-test it, fill gaps, or pull fresh information.
 
-GROUND RULES — non-negotiable:
-1. ONLY answer questions that relate to the company, ticker, financials, business model, market position, valuation, risks, catalysts, or analytical framework discussed in this report.
-2. If the user asks anything off-topic — weather, unrelated companies the report doesn't cover, general programming, life advice, etc. — politely refuse in one sentence and redirect to the report's content. Don't be lectury about it.
-3. Cite specifics from the report when relevant (e.g. "the 18-month horizon", "the 22% implied growth at 15% required return", named catalysts).
-4. If the report doesn't contain enough information to answer, say so explicitly. Don't fabricate.
-5. Keep answers tight — one to four short paragraphs. Use bullets where they aid clarity. No preamble, no closing meta-commentary, no emoji.
+GROUND RULES:
+1. STAY ON THE TICKER. Only answer questions related to ${t} — its business, financials, market position, peers, sector dynamics, regulatory environment, recent news, valuation, or anything else specific to this company. If asked about unrelated topics (off-topic companies, weather, general advice), politely decline in one sentence and steer back. Comparisons to peers and sector context ARE on-topic.
+2. THE REPORT IS A STARTING POINT, NOT A CEILING. Use the report as primary context, but you are NOT limited to it. Use WebSearch freely to pull fresh prices, recent news, latest filings, peer data, macro context — anything that sharpens the answer. The whole point is pressure-testing.
+3. DISAGREE WHEN WARRANTED. If fresh data contradicts the report or you spot a weak link in its reasoning, say so directly. The report is one analyst's view; you're an independent check.
+4. CITE WHAT YOU FETCH. When you bring in outside info, name the source briefly (e.g. "per the latest 10-Q" or "Bloomberg, ${new Date().toISOString().slice(0, 10)}"). When you reference the report, point to the section.
+5. KEEP IT TIGHT. Two to five short paragraphs. Bullets or small tables when they help. No preamble, no closing meta-commentary, no emoji.
 
-The user is reading this report on a desk and wants to extract more from it — pressure-test the thesis, compare assumptions, get clarification, or stress-test conclusions. Treat them as informed.`;
+The user is informed and reading at a desk — treat them as a peer.`;
+}
 
 export async function POST(req: NextRequest) {
-  let body: { report?: string; question?: string; history?: QAMessage[] };
+  let body: { report?: string; question?: string; history?: QAMessage[]; ticker?: string };
   try { body = await req.json(); } catch { return new Response("Invalid JSON", { status: 400 }); }
 
   const reportMd = (body.report ?? "").toString();
   const question = (body.question ?? "").trim();
+  const ticker = (body.ticker ?? "").trim().toUpperCase();
   const history = Array.isArray(body.history) ? body.history.slice(-10) : [];
   if (!reportMd || !question) {
     return new Response("Missing report or question", { status: 400 });
@@ -48,7 +52,7 @@ export async function POST(req: NextRequest) {
   // Build the contextualised prompt. We bake the report into the system message
   // so the user message is just their question.
   const fullPrompt = [
-    `${SYSTEM}\n\n<report>\n${reportMd}\n</report>`,
+    `${buildSystemPrompt(ticker)}\n\n<report>\n${reportMd}\n</report>`,
     "",
     history.length > 0 ? "<conversation_history>" : "",
     ...history.map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`),
@@ -67,9 +71,18 @@ export async function POST(req: NextRequest) {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`)); }
         catch { canceled = true; }
       };
+      // Same rationale as analyze route: SSE comments keep Railway's edge
+      // proxy from dropping the connection during silent stretches (e.g. a
+      // 30s WebSearch call). Comments are ignored by the client parser.
+      const heartbeat = setInterval(() => {
+        if (canceled || closed) return;
+        try { controller.enqueue(encoder.encode(`: keepalive\n\n`)); }
+        catch { canceled = true; }
+      }, 15_000);
       const safeClose = () => {
         if (closed) return;
         closed = true;
+        clearInterval(heartbeat);
         try { controller.close(); } catch { /* already closed */ }
       };
       try {
