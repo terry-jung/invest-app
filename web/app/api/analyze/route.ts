@@ -53,6 +53,16 @@ export async function POST(req: NextRequest) {
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(evt)}\n\n`)); }
         catch { canceled = true; }
       };
+      // SSE comment lines (`:` prefix) are ignored by the client but keep
+      // the TCP connection alive across long silent stretches — e.g. a
+      // 60s WebSearch tool call where the agent produces no output.
+      // Without this, Railway's edge proxy closes the idle connection
+      // and the browser sees "Error: network error".
+      const heartbeat = setInterval(() => {
+        if (canceled || closed) return;
+        try { controller.enqueue(encoder.encode(`: keepalive\n\n`)); }
+        catch { canceled = true; }
+      }, 15_000);
       // Guard against double-close: when the client disconnects mid-stream,
       // the runtime closes the controller. A subsequent close() throws
       // ERR_INVALID_STATE, which then falls into the catch block that
@@ -61,6 +71,7 @@ export async function POST(req: NextRequest) {
       const safeClose = () => {
         if (closed) return;
         closed = true;
+        clearInterval(heartbeat);
         try { controller.close(); } catch { /* already closed */ }
       };
 
