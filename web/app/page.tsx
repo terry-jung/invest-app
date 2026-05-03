@@ -243,9 +243,12 @@ export default function Page() {
   const [trialsUsed, setTrialsUsed] = useState<number>(0);
   const [byokOpen, setByokOpen] = useState(false);
   const [byokForced, setByokForced] = useState(false);
-  // Owner mode bypasses the trial counter entirely. Auto-true on localhost
-  // (so dev never trips the gate). On production, set via /?owner=1 once.
+  // Owner mode bypasses the trial counter entirely. Resolution:
+  //   - localhost  → auto-owner (dev convenience)
+  //   - production → signed `owner_session` cookie verified by /api/me
+  // Login flow lives in the LoginModal component below.
   const [ownerMode, setOwnerMode] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
   const ownerModeRef = useRef(false);
   useEffect(() => { ownerModeRef.current = ownerMode; }, [ownerMode]);
 
@@ -255,31 +258,21 @@ export default function Page() {
     const t = parseInt(localStorage.getItem("trialsUsed") || "0", 10);
     setTrialsUsed(Number.isFinite(t) ? t : 0);
 
-    // Owner-mode resolution.
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const flag = params.get("owner");
-      if (flag === "1") {
-        localStorage.setItem("ownerMode", "1");
-        window.history.replaceState({}, "", window.location.pathname);
-      } else if (flag === "0") {
-        localStorage.removeItem("ownerMode");
-        window.history.replaceState({}, "", window.location.pathname);
-      }
-    } catch { /* ignore */ }
     const isLocalhost = window.location.hostname === "localhost"
       || window.location.hostname === "127.0.0.1";
-    let savedFlag = false;
-    try { savedFlag = localStorage.getItem("ownerMode") === "1"; } catch { /* ignore */ }
-    // iOS home-screen PWA + Android installed PWA both report standalone
-    // display-mode. iOS standalone PWAs run in an isolated storage scope
-    // so the localStorage flag set in regular Safari doesn't carry over —
-    // treating "installed" as owner is the simplest reliable signal.
-    const isStandalone =
-      (window.navigator as { standalone?: boolean }).standalone === true ||
-      window.matchMedia("(display-mode: standalone)").matches;
-    setOwnerMode(isLocalhost || savedFlag || isStandalone);
+    if (isLocalhost) { setOwnerMode(true); return; }
+
+    fetch("/api/me", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : { owner: false }))
+      .then((d: { owner?: boolean }) => setOwnerMode(!!d.owner))
+      .catch(() => setOwnerMode(false));
   }, []);
+
+  async function logout() {
+    try { await fetch("/api/logout", { method: "POST", credentials: "same-origin" }); }
+    catch { /* ignore — clear local state regardless */ }
+    setOwnerMode(false);
+  }
 
   const trialsLeft = Math.max(0, TRIAL_LIMIT - trialsUsed);
 
@@ -1202,6 +1195,14 @@ export default function Page() {
                   ? `${trialsLeft} of ${TRIAL_LIMIT} free analyses`
                   : "Add API key to continue"}
           </button>
+          <button
+            className="trial-badge"
+            data-state={ownerMode ? "owner" : ""}
+            onClick={() => { if (ownerMode) void logout(); else setLoginOpen(true); }}
+            title={ownerMode ? "Signed in — click to sign out" : "Sign in to sync saved analyses across devices"}
+          >
+            {ownerMode ? "Sign out" : "Sign in"}
+          </button>
           <span className="ml-auto text-[9.5px] font-bold uppercase tracking-[0.24em] text-[var(--color-muted)]">
             invest.app
           </span>
@@ -1294,6 +1295,13 @@ export default function Page() {
           onClose={() => { setByokOpen(false); setByokForced(false); }}
           onSave={saveApiKey}
           onClear={clearApiKey}
+        />
+      )}
+
+      {loginOpen && (
+        <LoginModal
+          onClose={() => setLoginOpen(false)}
+          onSuccess={() => { setOwnerMode(true); setLoginOpen(false); }}
         />
       )}
 
@@ -2087,6 +2095,66 @@ function BYOKModal({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* =============== LOGIN MODAL =============== */
+function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [draft, setDraft] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const pass = draft.trim();
+    if (!pass) { setErr("Enter your passphrase."); return; }
+    setBusy(true); setErr("");
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ passphrase: pass }),
+        credentials: "same-origin",
+      });
+      if (res.ok) onSuccess();
+      else if (res.status === 401) setErr("That passphrase didn't match.");
+      else setErr(`Login failed (${res.status}).`);
+    } catch {
+      setErr("Network error. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="byok-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="byok-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Sign in</h3>
+        <p className="lead">
+          Enter the owner passphrase to sync your saved analyses across devices. Sets a 30-day session cookie on this device.
+        </p>
+        <label htmlFor="login-pass">Passphrase</label>
+        <input
+          id="login-pass" type="password" autoFocus value={draft}
+          onChange={(e) => { setDraft(e.target.value); setErr(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
+          placeholder="••••••••"
+          disabled={busy}
+        />
+        {err && <div className="err">{err}</div>}
+        <div className="actions">
+          <button onClick={onClose} className="rounded-md border border-[var(--color-line-2)] bg-white px-4 py-2 text-sm text-[var(--color-ink)]">
+            Cancel
+          </button>
+          <button
+            onClick={() => void submit()}
+            disabled={busy}
+            className="rounded-md bg-[var(--color-accent)] px-5 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {busy ? "Checking…" : "Sign in"}
+          </button>
+        </div>
       </div>
     </div>
   );
