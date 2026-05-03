@@ -271,7 +271,14 @@ export default function Page() {
       || window.location.hostname === "127.0.0.1";
     let savedFlag = false;
     try { savedFlag = localStorage.getItem("ownerMode") === "1"; } catch { /* ignore */ }
-    setOwnerMode(isLocalhost || savedFlag);
+    // iOS home-screen PWA + Android installed PWA both report standalone
+    // display-mode. iOS standalone PWAs run in an isolated storage scope
+    // so the localStorage flag set in regular Safari doesn't carry over —
+    // treating "installed" as owner is the simplest reliable signal.
+    const isStandalone =
+      (window.navigator as { standalone?: boolean }).standalone === true ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    setOwnerMode(isLocalhost || savedFlag || isStandalone);
   }, []);
 
   const trialsLeft = Math.max(0, TRIAL_LIMIT - trialsUsed);
