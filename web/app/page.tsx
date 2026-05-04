@@ -243,12 +243,14 @@ export default function Page() {
   const [trialsUsed, setTrialsUsed] = useState<number>(0);
   const [byokOpen, setByokOpen] = useState(false);
   const [byokForced, setByokForced] = useState(false);
-  // Owner mode bypasses the trial counter entirely. Resolution:
-  //   - localhost  → auto-owner (dev convenience)
-  //   - production → signed `owner_session` cookie verified by /api/me
-  // Login flow lives in the LoginModal component below.
-  const [ownerMode, setOwnerMode] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
+  // Authenticated user, fetched from /api/me on mount and updated after
+  // sign in / sign out. `user === null` means signed out (which gates
+  // saved-analyses sync). `ownerMode` is just an alias kept for legacy
+  // call sites that still treat "signed in" as "trial bypass."
+  type AuthedUser = { id: string; email: string };
+  const [user, setUser] = useState<AuthedUser | null>(null);
+  const ownerMode = !!user;
+  const [authOpen, setAuthOpen] = useState(false);
   const ownerModeRef = useRef(false);
   useEffect(() => { ownerModeRef.current = ownerMode; }, [ownerMode]);
 
@@ -258,20 +260,16 @@ export default function Page() {
     const t = parseInt(localStorage.getItem("trialsUsed") || "0", 10);
     setTrialsUsed(Number.isFinite(t) ? t : 0);
 
-    const isLocalhost = window.location.hostname === "localhost"
-      || window.location.hostname === "127.0.0.1";
-    if (isLocalhost) { setOwnerMode(true); return; }
-
     fetch("/api/me", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : { owner: false }))
-      .then((d: { owner?: boolean }) => setOwnerMode(!!d.owner))
-      .catch(() => setOwnerMode(false));
+      .then((r) => (r.ok ? r.json() : { user: null }))
+      .then((d: { user?: AuthedUser | null }) => setUser(d.user ?? null))
+      .catch(() => setUser(null));
   }, []);
 
   async function logout() {
     try { await fetch("/api/logout", { method: "POST", credentials: "same-origin" }); }
     catch { /* ignore — clear local state regardless */ }
-    setOwnerMode(false);
+    setUser(null);
   }
 
   const trialsLeft = Math.max(0, TRIAL_LIMIT - trialsUsed);
@@ -554,10 +552,12 @@ export default function Page() {
     }
   }, [starred]);
 
-  useEffect(() => { loadSaved(); }, [loadSaved]);
+  // Saved list is per-user and only meaningful once signed in. Avoid the
+  // 401 noise from /api/saved when the user lands on the page logged out.
+  useEffect(() => { if (user) loadSaved(); else { setSaved([]); setStarred({}); } }, [user, loadSaved]);
 
   useEffect(() => {
-    if (view !== "saved") return;
+    if (view !== "saved" || !user) return;
     loadSaved();
     // Fetch live quotes for all tickers
     const tickers = Array.from(new Set(saved.map((s) => s.ticker)));
@@ -1198,8 +1198,8 @@ export default function Page() {
           <button
             className="trial-badge"
             data-state={ownerMode ? "owner" : ""}
-            onClick={() => { if (ownerMode) void logout(); else setLoginOpen(true); }}
-            title={ownerMode ? "Signed in — click to sign out" : "Sign in to sync saved analyses across devices"}
+            onClick={() => { if (ownerMode) void logout(); else setAuthOpen(true); }}
+            title={ownerMode ? `Signed in as ${user?.email ?? ""} — click to sign out` : "Sign in or create an account to sync saved analyses"}
           >
             {ownerMode ? "Sign out" : "Sign in"}
           </button>
@@ -1298,10 +1298,10 @@ export default function Page() {
         />
       )}
 
-      {loginOpen && (
-        <LoginModal
-          onClose={() => setLoginOpen(false)}
-          onSuccess={() => { setOwnerMode(true); setLoginOpen(false); }}
+      {authOpen && (
+        <AuthModal
+          onClose={() => setAuthOpen(false)}
+          onSuccess={(u) => { setUser(u); setAuthOpen(false); }}
         />
       )}
 
@@ -2100,26 +2100,52 @@ function BYOKModal({
   );
 }
 
-/* =============== LOGIN MODAL =============== */
-function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [draft, setDraft] = useState("");
+/* =============== AUTH MODAL (sign in / sign up) =============== */
+function AuthModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: (user: { id: string; email: string }) => void;
+}) {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    const pass = draft.trim();
-    if (!pass) { setErr("Enter your passphrase."); return; }
-    setBusy(true); setErr("");
+    setErr("");
+    if (!email.trim()) { setErr("Email required."); return; }
+    if (password.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    if (mode === "signup" && !inviteCode.trim()) { setErr("Invite code required."); return; }
+
+    setBusy(true);
     try {
-      const res = await fetch("/api/login", {
+      const path = mode === "signin" ? "/api/login" : "/api/signup";
+      const body = mode === "signin"
+        ? { email: email.trim(), password }
+        : { email: email.trim(), password, inviteCode: inviteCode.trim() };
+      const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passphrase: pass }),
+        body: JSON.stringify(body),
         credentials: "same-origin",
       });
-      if (res.ok) onSuccess();
-      else if (res.status === 401) setErr("That passphrase didn't match.");
-      else setErr(`Login failed (${res.status}).`);
+      if (res.ok) {
+        const data = await res.json();
+        onSuccess(data.user);
+      } else {
+        const text = await res.text().catch(() => "");
+        // /api/signup returns JSON errors; /api/login returns plain text.
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          if (j.error) { setErr(j.error); return; }
+        } catch { /* fall through */ }
+        if (res.status === 401) setErr("Invalid email or password.");
+        else setErr(text || `Failed (${res.status}).`);
+      }
     } catch {
       setErr("Network error. Try again.");
     } finally {
@@ -2130,18 +2156,67 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
   return (
     <div className="byok-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="byok-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Sign in</h3>
-        <p className="lead">
-          Enter the owner passphrase to sync your saved analyses across devices. Sets a 30-day session cookie on this device.
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={() => { setMode("signin"); setErr(""); }}
+            style={{
+              flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signin" ? "2px solid var(--color-accent)" : "2px solid transparent",
+              background: "transparent", fontSize: 14, fontWeight: mode === "signin" ? 600 : 400, color: mode === "signin" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
+            }}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode("signup"); setErr(""); }}
+            style={{
+              flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signup" ? "2px solid var(--color-accent)" : "2px solid transparent",
+              background: "transparent", fontSize: 14, fontWeight: mode === "signup" ? 600 : 400, color: mode === "signup" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
+            }}
+          >
+            Create account
+          </button>
+        </div>
+
+        <p className="lead" style={{ marginTop: 0 }}>
+          {mode === "signin"
+            ? "Sign in to sync your saved analyses across devices."
+            : "Sign up with an invite code to start syncing your saved analyses."}
         </p>
-        <label htmlFor="login-pass">Passphrase</label>
+
+        <label htmlFor="auth-email">Email</label>
         <input
-          id="login-pass" type="password" autoFocus value={draft}
-          onChange={(e) => { setDraft(e.target.value); setErr(""); }}
+          id="auth-email" type="email" autoFocus value={email}
+          onChange={(e) => { setEmail(e.target.value); setErr(""); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
-          placeholder="••••••••"
+          placeholder="you@example.com"
           disabled={busy}
         />
+
+        <label htmlFor="auth-pass">Password</label>
+        <input
+          id="auth-pass" type="password" value={password}
+          onChange={(e) => { setPassword(e.target.value); setErr(""); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
+          placeholder={mode === "signup" ? "At least 8 characters" : ""}
+          disabled={busy}
+        />
+
+        {mode === "signup" && (
+          <>
+            <label htmlFor="auth-invite">Invite code</label>
+            <input
+              id="auth-invite" type="text" value={inviteCode}
+              onChange={(e) => { setInviteCode(e.target.value.toUpperCase()); setErr(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
+              placeholder="XXXX-XXXX-XXXX"
+              disabled={busy}
+              style={{ fontFamily: "monospace", letterSpacing: 1 }}
+            />
+          </>
+        )}
+
         {err && <div className="err">{err}</div>}
         <div className="actions">
           <button onClick={onClose} className="rounded-md border border-[var(--color-line-2)] bg-white px-4 py-2 text-sm text-[var(--color-ink)]">
@@ -2152,7 +2227,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: ()
             disabled={busy}
             className="rounded-md bg-[var(--color-accent)] px-5 py-2 text-sm text-white disabled:opacity-50"
           >
-            {busy ? "Checking…" : "Sign in"}
+            {busy ? (mode === "signin" ? "Signing in…" : "Creating…") : (mode === "signin" ? "Sign in" : "Create account")}
           </button>
         </div>
       </div>

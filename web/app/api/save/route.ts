@@ -1,9 +1,14 @@
 import { saveAnalysis, newId, parsePriceNumber, type SavedAnalysis } from "@/lib/saved";
 import { parseReport } from "@/lib/parse";
+import { requireUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const auth = requireUser(req);
+  if (auth instanceof Response) return auth;
+  const userId = auth;
+
   let body: { ticker?: string; markdown?: string };
   try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
 
@@ -29,6 +34,6 @@ export async function POST(req: Request) {
     marketCap: parsed.marketCap,
     body: markdown,
   };
-  await saveAnalysis(item);
+  await saveAnalysis(userId, item);
   return Response.json(item);
 }

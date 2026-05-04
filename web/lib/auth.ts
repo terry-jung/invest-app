@@ -1,13 +1,13 @@
 /**
- * Single-account passphrase auth.
+ * Multi-user auth: HMAC-signed session cookie that encodes a user id.
  *
- * Set OWNER_PASSPHRASE and OWNER_SESSION_SECRET on Railway. Logging in
- * with the passphrase sets a signed `owner_session` cookie (HMAC-SHA256
- * over an expiry timestamp); presence + validity of the cookie =
- * "this device is the owner."
+ * Token format: `<userId>.<expEpochSeconds>.<base64urlHmacSig>`
+ * The signature is computed over `<userId>.<expEpochSeconds>` so any
+ * tampering with either field invalidates it.
  *
- * Single-user app, so no users table — everyone who knows the passphrase
- * is the same one owner.
+ * Admin actions (generating invite codes) are NOT user sessions — they're
+ * gated by the OWNER_PASSPHRASE env var sent as a header. That keeps the
+ * admin surface separate from the regular user auth surface.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -32,25 +32,23 @@ function safeStringEqual(a: string, b: string): boolean {
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-export function verifyPassphrase(input: string): boolean {
-  const p = process.env.OWNER_PASSPHRASE;
-  if (!p) return false;
-  if (input.length === 0) return false;
-  return safeStringEqual(input, p);
-}
-
-export function makeSessionToken(): string {
+export function makeSessionToken(userId: string): string {
   const exp = String(Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SEC);
-  return `${exp}.${sign(exp)}`;
+  const payload = `${userId}.${exp}`;
+  return `${payload}.${sign(payload)}`;
 }
 
-export function isValidSessionToken(token: string | null | undefined): boolean {
-  if (!token) return false;
-  const [payload, sig] = token.split(".");
-  if (!payload || !sig) return false;
-  if (!safeStringEqual(sign(payload), sig)) return false;
-  const exp = parseInt(payload, 10);
-  return Number.isFinite(exp) && exp > Math.floor(Date.now() / 1000);
+export function parseSessionToken(token: string | null | undefined): { userId: string } | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [userId, exp, sig] = parts;
+  if (!userId || !exp || !sig) return null;
+  const payload = `${userId}.${exp}`;
+  if (!safeStringEqual(sign(payload), sig)) return null;
+  const expN = parseInt(exp, 10);
+  if (!Number.isFinite(expN) || expN <= Math.floor(Date.now() / 1000)) return null;
+  return { userId };
 }
 
 export function readSessionCookie(req: Request): string | null {
@@ -65,8 +63,8 @@ export function readSessionCookie(req: Request): string | null {
   return null;
 }
 
-export function isOwner(req: Request): boolean {
-  return isValidSessionToken(readSessionCookie(req));
+export function getSessionUserId(req: Request): string | null {
+  return parseSessionToken(readSessionCookie(req))?.userId ?? null;
 }
 
 export function buildSetCookie(value: string, maxAgeSec: number): string {
@@ -83,4 +81,29 @@ export function buildSetCookie(value: string, maxAgeSec: number): string {
 
 export function buildClearCookie(): string {
   return buildSetCookie("", 0);
+}
+
+/** Constant-time check of the OWNER_PASSPHRASE env var for admin endpoints. */
+export function verifyOwnerPassphrase(input: string): boolean {
+  const p = process.env.OWNER_PASSPHRASE;
+  if (!p) return false;
+  if (input.length === 0) return false;
+  return safeStringEqual(input, p);
+}
+
+/** True if the request carries a valid `x-owner-passphrase` header. */
+export function isAdmin(req: Request): boolean {
+  const h = req.headers.get("x-owner-passphrase")?.trim();
+  if (!h) return false;
+  return verifyOwnerPassphrase(h);
+}
+
+/**
+ * Use at the top of any user-scoped API route. Returns the user id if
+ * authenticated, or a 401 Response that the route should return as-is.
+ */
+export function requireUser(req: Request): string | Response {
+  const userId = getSessionUserId(req);
+  if (!userId) return new Response("Unauthorized", { status: 401 });
+  return userId;
 }

@@ -1,10 +1,12 @@
 /**
- * File-based saved-analysis storage. Files live at:
- *   <project-root>/output/saved-analyses/<TICKER>/<id>.json
+ * File-based saved-analysis storage, partitioned per user. Files live at:
+ *   <ROOT>/<userId>/<TICKER>/<id>.json
  *
  * Each file is the full SavedAnalysis record so opening one is one read.
- * Listing is a recursive scan — fine for the 10–500 saves a single user
- * is ever realistically going to accumulate.
+ * Every function takes a `userId` argument — there's no global namespace.
+ *
+ * Listing is a recursive scan of one user's tree — fine for the 10–500
+ * saves a single user is realistically going to accumulate.
  */
 
 import { readFile, writeFile, readdir, mkdir, rm, stat } from "node:fs/promises";
@@ -40,26 +42,30 @@ const ROOT = process.env.SAVED_ANALYSES_DIR
   ? process.env.SAVED_ANALYSES_DIR
   : path.join(process.cwd(), "..", "output", "saved-analyses");
 
-function dirFor(ticker: string) {
-  return path.join(ROOT, ticker.toUpperCase());
+function userRoot(userId: string) {
+  return path.join(ROOT, userId);
 }
-function fileFor(ticker: string, id: string) {
-  return path.join(dirFor(ticker), `${id}.json`);
+function dirFor(userId: string, ticker: string) {
+  return path.join(userRoot(userId), ticker.toUpperCase());
+}
+function fileFor(userId: string, ticker: string, id: string) {
+  return path.join(dirFor(userId, ticker), `${id}.json`);
 }
 
-export async function saveAnalysis(item: SavedAnalysis): Promise<SavedAnalysis> {
-  const dir = dirFor(item.ticker);
+export async function saveAnalysis(userId: string, item: SavedAnalysis): Promise<SavedAnalysis> {
+  const dir = dirFor(userId, item.ticker);
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
-  await writeFile(fileFor(item.ticker, item.id), JSON.stringify(item, null, 2), "utf8");
+  await writeFile(fileFor(userId, item.ticker, item.id), JSON.stringify(item, null, 2), "utf8");
   return item;
 }
 
-export async function listSaved(): Promise<SavedAnalysis[]> {
-  if (!existsSync(ROOT)) return [];
-  const tickers = await readdir(ROOT);
+export async function listSaved(userId: string): Promise<SavedAnalysis[]> {
+  const root = userRoot(userId);
+  if (!existsSync(root)) return [];
+  const tickers = await readdir(root);
   const all: SavedAnalysis[] = [];
   for (const t of tickers) {
-    const d = path.join(ROOT, t);
+    const d = path.join(root, t);
     let s; try { s = await stat(d); } catch { continue; }
     if (!s.isDirectory()) continue;
     const files = await readdir(d);
@@ -75,25 +81,25 @@ export async function listSaved(): Promise<SavedAnalysis[]> {
   return all;
 }
 
-export async function getSaved(id: string): Promise<SavedAnalysis | null> {
-  const list = await listSaved();
+export async function getSaved(userId: string, id: string): Promise<SavedAnalysis | null> {
+  const list = await listSaved(userId);
   return list.find(x => x.id === id) ?? null;
 }
 
-export async function deleteSaved(id: string): Promise<boolean> {
-  const item = await getSaved(id);
+export async function deleteSaved(userId: string, id: string): Promise<boolean> {
+  const item = await getSaved(userId, id);
   if (!item) return false;
-  await rm(fileFor(item.ticker, item.id));
+  await rm(fileFor(userId, item.ticker, item.id));
   // If the ticker dir is now empty, remove it too.
   try {
-    const remaining = await readdir(dirFor(item.ticker));
-    if (remaining.length === 0) await rm(dirFor(item.ticker), { recursive: true });
+    const remaining = await readdir(dirFor(userId, item.ticker));
+    if (remaining.length === 0) await rm(dirFor(userId, item.ticker), { recursive: true });
   } catch { /* ignore */ }
   return true;
 }
 
-export async function deleteTicker(ticker: string): Promise<number> {
-  const dir = dirFor(ticker);
+export async function deleteTicker(userId: string, ticker: string): Promise<number> {
+  const dir = dirFor(userId, ticker);
   if (!existsSync(dir)) return 0;
   const files = await readdir(dir);
   let n = 0;
@@ -125,12 +131,15 @@ export function parsePriceNumber(rawPrice: string | null): number | null {
 export type StarredEntry = { name: string; starredAt: string };
 export type StarredMap = Record<string, StarredEntry>;
 
-const STARRED_FILE = path.join(ROOT, "_starred.json");
+function starredFile(userId: string) {
+  return path.join(userRoot(userId), "_starred.json");
+}
 
-export async function loadStarred(): Promise<StarredMap> {
+export async function loadStarred(userId: string): Promise<StarredMap> {
   try {
-    if (!existsSync(STARRED_FILE)) return {};
-    const txt = await readFile(STARRED_FILE, "utf8");
+    const f = starredFile(userId);
+    if (!existsSync(f)) return {};
+    const txt = await readFile(f, "utf8");
     const parsed = JSON.parse(txt);
     return parsed && typeof parsed === "object" ? (parsed as StarredMap) : {};
   } catch {
@@ -138,28 +147,29 @@ export async function loadStarred(): Promise<StarredMap> {
   }
 }
 
-async function saveStarredMap(map: StarredMap): Promise<void> {
-  if (!existsSync(ROOT)) await mkdir(ROOT, { recursive: true });
-  await writeFile(STARRED_FILE, JSON.stringify(map, null, 2), "utf8");
+async function saveStarredMap(userId: string, map: StarredMap): Promise<void> {
+  const root = userRoot(userId);
+  if (!existsSync(root)) await mkdir(root, { recursive: true });
+  await writeFile(starredFile(userId), JSON.stringify(map, null, 2), "utf8");
 }
 
-export async function addStar(ticker: string, name?: string): Promise<StarredEntry> {
+export async function addStar(userId: string, ticker: string, name?: string): Promise<StarredEntry> {
   const t = ticker.toUpperCase();
-  const map = await loadStarred();
+  const map = await loadStarred(userId);
   const entry: StarredEntry = {
     name: (name && name.trim()) || map[t]?.name || t,
     starredAt: map[t]?.starredAt || new Date().toISOString(),
   };
   map[t] = entry;
-  await saveStarredMap(map);
+  await saveStarredMap(userId, map);
   return entry;
 }
 
-export async function removeStar(ticker: string): Promise<boolean> {
+export async function removeStar(userId: string, ticker: string): Promise<boolean> {
   const t = ticker.toUpperCase();
-  const map = await loadStarred();
+  const map = await loadStarred(userId);
   if (!(t in map)) return false;
   delete map[t];
-  await saveStarredMap(map);
+  await saveStarredMap(userId, map);
   return true;
 }
