@@ -9,7 +9,7 @@ import type { SavedAnalysis } from "@/lib/saved";
 import type { Quote } from "@/lib/quote";
 
 type RunState = "idle" | "running" | "done" | "error";
-type View = "hunter" | "run" | "saved";
+type View = "hunter" | "run" | "saved" | "account";
 type SaveState = "idle" | "saving" | "saved" | "error";
 type HuntState = "idle" | "prompting" | "thinking" | "done" | "error";
 
@@ -1195,14 +1195,6 @@ export default function Page() {
                   ? `${trialsLeft} of ${TRIAL_LIMIT} free analyses`
                   : "Add API key to continue"}
           </button>
-          <button
-            className="trial-badge"
-            data-state={ownerMode ? "owner" : ""}
-            onClick={() => { if (ownerMode) void logout(); else setAuthOpen(true); }}
-            title={ownerMode ? `Signed in as ${user?.email ?? ""} — click to sign out` : "Sign in or create an account to sync saved analyses"}
-          >
-            {ownerMode ? "Sign out" : "Sign in"}
-          </button>
           <span className="ml-auto text-[9.5px] font-bold uppercase tracking-[0.24em] text-[var(--color-muted)]">
             invest.app
           </span>
@@ -1259,6 +1251,14 @@ export default function Page() {
           onOpen={openSaved}
           onPickTicker={(t) => { setTicker(t); setView("run"); }}
           onToggleStar={toggleStar}
+        />
+      )}
+
+      {view === "account" && (
+        <AccountView
+          user={user}
+          onSignIn={() => setAuthOpen(true)}
+          onSignOut={() => void logout()}
         />
       )}
 
@@ -1345,6 +1345,19 @@ export default function Page() {
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
           <span>Saved{totalTickers > 0 && <span className="nav-count">· {totalTickers}</span>}</span>
+        </button>
+        <button
+          className="nav-tab"
+          aria-current={view === "account" ? "true" : "false"}
+          aria-label="Account"
+          onClick={() => setView("account")}
+        >
+          {/* Person icon */}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+          </svg>
+          <span>Account</span>
         </button>
       </nav>
     </main>
@@ -2097,6 +2110,53 @@ function BYOKModal({
         )}
       </div>
     </div>
+  );
+}
+
+/* =============== ACCOUNT VIEW (in-page, accessed from GNB) =============== */
+function AccountView({
+  user,
+  onSignIn,
+  onSignOut,
+}: {
+  user: { id: string; email: string } | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <section style={{ maxWidth: 480, margin: "32px auto 96px", padding: "0 20px" }}>
+      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>Account</h2>
+      <p style={{ fontSize: 13, color: "var(--color-muted)", marginBottom: 24 }}>
+        Sign in to sync your saved analyses across desktop and iPhone.
+      </p>
+
+      {user ? (
+        <div style={{ border: "1px solid var(--color-line-2)", borderRadius: 8, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-muted)", marginBottom: 4 }}>
+            Signed in as
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 16, wordBreak: "break-all" }}>{user.email}</div>
+          <button
+            onClick={onSignOut}
+            className="rounded-md border border-[var(--color-line-2)] bg-white px-4 py-2 text-sm text-[var(--color-ink)]"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <div style={{ border: "1px solid var(--color-line-2)", borderRadius: 8, padding: 16 }}>
+          <div style={{ fontSize: 14, marginBottom: 16, color: "var(--color-ink)" }}>
+            You&apos;re not signed in. Saved analyses live with your account — sign in to see them on every device.
+          </div>
+          <button
+            onClick={onSignIn}
+            className="rounded-md bg-[var(--color-accent)] px-4 py-2 text-sm text-white"
+          >
+            Sign in or create account
+          </button>
+        </div>
+      )}
+    </section>
   );
 }
 
