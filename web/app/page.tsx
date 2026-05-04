@@ -2175,6 +2175,34 @@ function AuthModal({
   const [inviteCode, setInviteCode] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+
+  async function requestMagicLink() {
+    setErr("");
+    if (!email.trim()) { setErr("Enter your email above."); return; }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/magic-link/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      if (res.ok) {
+        setMagicLinkSent(true);
+      } else {
+        const text = await res.text().catch(() => "");
+        try {
+          const j = JSON.parse(text) as { error?: string };
+          if (j.error) { setErr(j.error); return; }
+        } catch { /* fall through */ }
+        setErr(text || `Failed (${res.status}).`);
+      }
+    } catch {
+      setErr("Network error. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit() {
     setErr("");
@@ -2229,6 +2257,24 @@ function AuthModal({
     mode === "signin" ? (busy ? "Signing in…" : "Sign in")
     : mode === "signup" ? (busy ? "Creating…" : "Create account")
     : (busy ? "Resetting…" : "Reset password");
+
+  if (magicLinkSent) {
+    return (
+      <div className="byok-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="byok-modal" onClick={(e) => e.stopPropagation()}>
+          <h3 style={{ marginBottom: 4 }}>Check your inbox</h3>
+          <p className="lead">
+            If <b>{email.trim()}</b> is on an account, a sign-in link is on the way. Click it to finish signing in. Link expires in 15 minutes.
+          </p>
+          <div className="actions">
+            <button onClick={onClose} className="rounded-md bg-[var(--color-accent)] px-5 py-2 text-sm text-white">
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="byok-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -2316,6 +2362,26 @@ function AuthModal({
             style={{ alignSelf: "flex-start", marginTop: 4, fontSize: 12, color: "var(--color-muted)", background: "transparent", border: 0, cursor: "pointer", padding: 0, textDecoration: "underline" }}
           >
             Forgot password?
+          </button>
+        )}
+
+        {mode === "signin" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0 8px", fontSize: 11, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            <div style={{ flex: 1, height: 1, background: "var(--color-line-2)" }} />
+            <span>or</span>
+            <div style={{ flex: 1, height: 1, background: "var(--color-line-2)" }} />
+          </div>
+        )}
+
+        {mode === "signin" && (
+          <button
+            type="button"
+            onClick={() => void requestMagicLink()}
+            disabled={busy}
+            className="rounded-md border border-[var(--color-line-2)] bg-white px-4 py-2 text-sm text-[var(--color-ink)] disabled:opacity-50"
+            style={{ width: "100%" }}
+          >
+            {busy ? "Sending…" : "Email me a sign-in link"}
           </button>
         )}
 
