@@ -1,9 +1,11 @@
 /**
- * Invite-code CRUD. Codes are 12-char base32 (e.g. "K7H3-9XQ2-MZRT")
- * — random 60 bits of entropy, plenty for an invite-only app.
+ * Invite-code CRUD with multi-use cap. Codes are 12-char base32
+ * (e.g. "K7H3-9XQ2-MZRT") — random 60 bits of entropy.
  *
- * Redemption is atomic: a single UPDATE that only succeeds if the code
- * is still unredeemed. Caller checks `changes` to know if it landed.
+ * Each code carries a `max_uses` cap and a `uses` counter. Redemption
+ * is atomic: a single UPDATE that only succeeds when `uses < max_uses`.
+ * Each successful redemption also writes an `invite_redemptions` row
+ * for audit (which user, when, signup-vs-reset).
  */
 
 import { randomBytes } from "node:crypto";
@@ -13,9 +15,9 @@ export type InviteCode = {
   code: string;
   note: string | null;
   created_at: string;
-  redeemed_at: string | null;
-  redeemed_by: string | null;
-  redeemed_email: string | null;
+  max_uses: number;
+  uses: number;
+  redemptions: Array<{ user_id: string; email: string | null; kind: string; redeemed_at: string }>;
 };
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // base32 minus 0/1/I/O ambiguity
@@ -30,54 +32,67 @@ function generateCode(): string {
   return out;
 }
 
-export function createInvite(note: string | null): InviteCode {
+export function createInvite(note: string | null, maxUses: number): InviteCode {
+  const cap = Math.max(1, Math.min(1000, Math.floor(maxUses) || 1));
   const code = generateCode();
   const createdAt = new Date().toISOString();
   db().prepare(
-    "INSERT INTO invite_codes (code, note, created_at) VALUES (?, ?, ?)"
-  ).run(code, note, createdAt);
-  return {
-    code,
-    note,
-    created_at: createdAt,
-    redeemed_at: null,
-    redeemed_by: null,
-    redeemed_email: null,
-  };
+    "INSERT INTO invite_codes (code, note, created_at, max_uses, uses) VALUES (?, ?, ?, ?, 0)"
+  ).run(code, note, createdAt, cap);
+  return { code, note, created_at: createdAt, max_uses: cap, uses: 0, redemptions: [] };
 }
 
 /**
- * Atomically redeem `code` for `userId`. Returns true if the code was
- * unredeemed and just got marked redeemed; false if it was already
- * redeemed or doesn't exist. Caller is responsible for creating the
- * user first and for rolling back the user creation if this returns
- * false (or — easier — verifying the code's redeemability before
- * creating the user, then redeeming after; race window is tiny but
- * the unique-email constraint catches duplicates).
+ * Atomically redeem `code` for `userId`. Returns true if the code had
+ * remaining uses and just got incremented; false if it was used up or
+ * doesn't exist. The accompanying audit row in `invite_redemptions`
+ * is only written on success.
  */
-export function redeemInvite(code: string, userId: string): boolean {
-  const now = new Date().toISOString();
+export function redeemInvite(code: string, userId: string, kind: "signup" | "reset"): boolean {
   const result = db().prepare(
-    "UPDATE invite_codes SET redeemed_at = ?, redeemed_by = ? WHERE code = ? AND redeemed_at IS NULL"
-  ).run(now, userId, code);
-  return result.changes > 0;
+    "UPDATE invite_codes SET uses = uses + 1 WHERE code = ? AND uses < max_uses"
+  ).run(code);
+  if (result.changes === 0) return false;
+
+  const now = new Date().toISOString();
+  db().prepare(
+    "INSERT INTO invite_redemptions (code, user_id, kind, redeemed_at) VALUES (?, ?, ?, ?)"
+  ).run(code, userId, kind, now);
+  return true;
 }
 
 export function isInviteRedeemable(code: string): boolean {
   const row = db().prepare(
-    "SELECT redeemed_at FROM invite_codes WHERE code = ?"
-  ).get(code) as { redeemed_at: string | null } | undefined;
+    "SELECT max_uses, uses FROM invite_codes WHERE code = ?"
+  ).get(code) as { max_uses: number; uses: number } | undefined;
   if (!row) return false;
-  return row.redeemed_at === null;
+  return row.uses < row.max_uses;
 }
 
 export function listInvites(): InviteCode[] {
   const rows = db().prepare(
-    `SELECT i.code, i.note, i.created_at, i.redeemed_at, i.redeemed_by,
-            u.email AS redeemed_email
-     FROM invite_codes i
-     LEFT JOIN users u ON u.id = i.redeemed_by
-     ORDER BY i.created_at DESC`
-  ).all() as InviteCode[];
-  return rows;
+    `SELECT code, note, created_at, max_uses, uses
+     FROM invite_codes
+     ORDER BY created_at DESC`
+  ).all() as Array<Omit<InviteCode, "redemptions">>;
+
+  if (rows.length === 0) return [];
+
+  const codes = rows.map((r) => r.code);
+  const placeholders = codes.map(() => "?").join(",");
+  const reds = db().prepare(
+    `SELECT r.code, r.user_id, r.kind, r.redeemed_at, u.email
+     FROM invite_redemptions r
+     LEFT JOIN users u ON u.id = r.user_id
+     WHERE r.code IN (${placeholders})
+     ORDER BY r.redeemed_at ASC`
+  ).all(...codes) as Array<{ code: string; user_id: string; kind: string; redeemed_at: string; email: string | null }>;
+
+  const byCode = new Map<string, InviteCode["redemptions"]>();
+  for (const r of reds) {
+    if (!byCode.has(r.code)) byCode.set(r.code, []);
+    byCode.get(r.code)!.push({ user_id: r.user_id, email: r.email, kind: r.kind, redeemed_at: r.redeemed_at });
+  }
+
+  return rows.map((r) => ({ ...r, redemptions: byCode.get(r.code) ?? [] }));
 }

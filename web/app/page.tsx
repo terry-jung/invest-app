@@ -2160,7 +2160,7 @@ function AccountView({
   );
 }
 
-/* =============== AUTH MODAL (sign in / sign up) =============== */
+/* =============== AUTH MODAL (sign in / sign up / reset) =============== */
 function AuthModal({
   onClose,
   onSuccess,
@@ -2168,7 +2168,8 @@ function AuthModal({
   onClose: () => void;
   onSuccess: (user: { id: string; email: string }) => void;
 }) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  type Mode = "signin" | "signup" | "reset";
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -2179,14 +2180,21 @@ function AuthModal({
     setErr("");
     if (!email.trim()) { setErr("Email required."); return; }
     if (password.length < 8) { setErr("Password must be at least 8 characters."); return; }
-    if (mode === "signup" && !inviteCode.trim()) { setErr("Invite code required."); return; }
+    if ((mode === "signup" || mode === "reset") && !inviteCode.trim()) {
+      setErr("Invite code required.");
+      return;
+    }
 
     setBusy(true);
     try {
-      const path = mode === "signin" ? "/api/login" : "/api/signup";
-      const body = mode === "signin"
-        ? { email: email.trim(), password }
-        : { email: email.trim(), password, inviteCode: inviteCode.trim() };
+      const path =
+        mode === "signin" ? "/api/login"
+        : mode === "signup" ? "/api/signup"
+        : "/api/reset";
+      const body =
+        mode === "signin" ? { email: email.trim(), password }
+        : mode === "signup" ? { email: email.trim(), password, inviteCode: inviteCode.trim() }
+        : { email: email.trim(), newPassword: password, inviteCode: inviteCode.trim() };
       const res = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2198,7 +2206,7 @@ function AuthModal({
         onSuccess(data.user);
       } else {
         const text = await res.text().catch(() => "");
-        // /api/signup returns JSON errors; /api/login returns plain text.
+        // signup/reset return JSON errors; login returns plain text.
         try {
           const j = JSON.parse(text) as { error?: string };
           if (j.error) { setErr(j.error); return; }
@@ -2213,36 +2221,60 @@ function AuthModal({
     }
   }
 
+  const passwordPlaceholder =
+    mode === "signin" ? ""
+    : mode === "signup" ? "At least 8 characters"
+    : "New password (8+ characters)";
+  const submitLabel =
+    mode === "signin" ? (busy ? "Signing in…" : "Sign in")
+    : mode === "signup" ? (busy ? "Creating…" : "Create account")
+    : (busy ? "Resetting…" : "Reset password");
+
   return (
     <div className="byok-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="byok-modal" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        {mode !== "reset" ? (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={() => { setMode("signin"); setErr(""); }}
+              style={{
+                flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signin" ? "2px solid var(--color-accent)" : "2px solid transparent",
+                background: "transparent", fontSize: 14, fontWeight: mode === "signin" ? 600 : 400, color: mode === "signin" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
+              }}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("signup"); setErr(""); }}
+              style={{
+                flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signup" ? "2px solid var(--color-accent)" : "2px solid transparent",
+                background: "transparent", fontSize: 14, fontWeight: mode === "signup" ? 600 : 400, color: mode === "signup" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
+              }}
+            >
+              Create account
+            </button>
+          </div>
+        ) : (
           <button
             type="button"
             onClick={() => { setMode("signin"); setErr(""); }}
-            style={{
-              flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signin" ? "2px solid var(--color-accent)" : "2px solid transparent",
-              background: "transparent", fontSize: 14, fontWeight: mode === "signin" ? 600 : 400, color: mode === "signin" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
-            }}
+            style={{ marginBottom: 12, fontSize: 12, color: "var(--color-muted)", background: "transparent", border: 0, cursor: "pointer", padding: 0 }}
           >
-            Sign in
+            ← Back to sign in
           </button>
-          <button
-            type="button"
-            onClick={() => { setMode("signup"); setErr(""); }}
-            style={{
-              flex: 1, padding: "8px 12px", border: 0, borderBottom: mode === "signup" ? "2px solid var(--color-accent)" : "2px solid transparent",
-              background: "transparent", fontSize: 14, fontWeight: mode === "signup" ? 600 : 400, color: mode === "signup" ? "var(--color-ink)" : "var(--color-muted)", cursor: "pointer",
-            }}
-          >
-            Create account
-          </button>
-        </div>
+        )}
 
+        <h3 style={{ marginBottom: 4 }}>
+          {mode === "reset" ? "Reset password" : null}
+        </h3>
         <p className="lead" style={{ marginTop: 0 }}>
           {mode === "signin"
             ? "Sign in to sync your saved analyses across devices."
-            : "Sign up with an invite code to start syncing your saved analyses."}
+            : mode === "signup"
+              ? "Sign up with an invite code to start syncing your saved analyses."
+              : "Enter your email, a fresh invite code, and a new password. Your saved analyses stay attached to the same account."}
         </p>
 
         <label htmlFor="auth-email">Email</label>
@@ -2254,16 +2286,16 @@ function AuthModal({
           disabled={busy}
         />
 
-        <label htmlFor="auth-pass">Password</label>
+        <label htmlFor="auth-pass">{mode === "reset" ? "New password" : "Password"}</label>
         <input
           id="auth-pass" type="password" value={password}
           onChange={(e) => { setPassword(e.target.value); setErr(""); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
-          placeholder={mode === "signup" ? "At least 8 characters" : ""}
+          placeholder={passwordPlaceholder}
           disabled={busy}
         />
 
-        {mode === "signup" && (
+        {(mode === "signup" || mode === "reset") && (
           <>
             <label htmlFor="auth-invite">Invite code</label>
             <input
@@ -2277,6 +2309,16 @@ function AuthModal({
           </>
         )}
 
+        {mode === "signin" && (
+          <button
+            type="button"
+            onClick={() => { setMode("reset"); setErr(""); }}
+            style={{ alignSelf: "flex-start", marginTop: 4, fontSize: 12, color: "var(--color-muted)", background: "transparent", border: 0, cursor: "pointer", padding: 0, textDecoration: "underline" }}
+          >
+            Forgot password?
+          </button>
+        )}
+
         {err && <div className="err">{err}</div>}
         <div className="actions">
           <button onClick={onClose} className="rounded-md border border-[var(--color-line-2)] bg-white px-4 py-2 text-sm text-[var(--color-ink)]">
@@ -2287,7 +2329,7 @@ function AuthModal({
             disabled={busy}
             className="rounded-md bg-[var(--color-accent)] px-5 py-2 text-sm text-white disabled:opacity-50"
           >
-            {busy ? (mode === "signin" ? "Signing in…" : "Creating…") : (mode === "signin" ? "Sign in" : "Create account")}
+            {submitLabel}
           </button>
         </div>
       </div>

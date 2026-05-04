@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 
+type Redemption = { user_id: string; email: string | null; kind: string; redeemed_at: string };
 type Invite = {
   code: string;
   note: string | null;
   created_at: string;
-  redeemed_at: string | null;
-  redeemed_email: string | null;
+  max_uses: number;
+  uses: number;
+  redemptions: Redemption[];
 };
 
 export default function AdminPage() {
@@ -15,6 +17,7 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [note, setNote] = useState("");
+  const [maxUses, setMaxUses] = useState("1");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [justCreated, setJustCreated] = useState<string | null>(null);
@@ -52,13 +55,14 @@ export default function AdminPage() {
   async function createInvite() {
     setBusy(true); setErr(""); setJustCreated(null);
     try {
+      const cap = Math.max(1, Math.min(1000, parseInt(maxUses, 10) || 1));
       const res = await fetch("/api/admin/invites", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-owner-passphrase": pass,
         },
-        body: JSON.stringify({ note: note.trim() || null }),
+        body: JSON.stringify({ note: note.trim() || null, maxUses: cap }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -110,13 +114,26 @@ export default function AdminPage() {
 
       <section style={{ background: "#f6f6f6", padding: 16, borderRadius: 8, marginBottom: 32 }}>
         <h2 style={{ fontSize: 16, marginBottom: 8 }}>Generate new code</h2>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Optional note (e.g. 'for Jane')"
-          style={{ width: "100%", padding: "8px 10px", border: "1px solid #ccc", borderRadius: 6, fontSize: 14, marginBottom: 8 }}
-          disabled={busy}
-        />
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional note (e.g. 'for Jane')"
+            style={{ flex: 1, padding: "8px 10px", border: "1px solid #ccc", borderRadius: 6, fontSize: 14 }}
+            disabled={busy}
+          />
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            value={maxUses}
+            onChange={(e) => setMaxUses(e.target.value)}
+            title="Max uses (1 = single-use)"
+            style={{ width: 90, padding: "8px 10px", border: "1px solid #ccc", borderRadius: 6, fontSize: 14, textAlign: "center" }}
+            disabled={busy}
+          />
+        </div>
+        <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>Max uses — how many people can redeem this one code (signups + resets combined)</div>
         <button
           onClick={() => void createInvite()}
           disabled={busy}
@@ -137,30 +154,32 @@ export default function AdminPage() {
       {invites.length === 0 ? (
         <div style={{ color: "#666", fontSize: 14 }}>No codes yet. Generate one above.</div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #ddd", textAlign: "left" }}>
-              <th style={{ padding: "8px 4px" }}>Code</th>
-              <th style={{ padding: "8px 4px" }}>Note</th>
-              <th style={{ padding: "8px 4px" }}>Created</th>
-              <th style={{ padding: "8px 4px" }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invites.map((inv) => (
-              <tr key={inv.code} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "8px 4px", fontFamily: "monospace" }}>{inv.code}</td>
-                <td style={{ padding: "8px 4px", color: "#666" }}>{inv.note || "—"}</td>
-                <td style={{ padding: "8px 4px", color: "#666" }}>{inv.created_at.slice(0, 10)}</td>
-                <td style={{ padding: "8px 4px" }}>
-                  {inv.redeemed_at
-                    ? <span style={{ color: "#666" }}>Used by {inv.redeemed_email ?? "?"}</span>
-                    : <span style={{ color: "#0a0", fontWeight: 600 }}>Available</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {invites.map((inv) => {
+            const exhausted = inv.uses >= inv.max_uses;
+            return (
+              <div key={inv.code} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, background: "#fff" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+                  <code style={{ fontSize: 14, fontWeight: 600 }}>{inv.code}</code>
+                  <span style={{ fontSize: 12, color: exhausted ? "#888" : "#0a0", fontWeight: 600 }}>
+                    {inv.uses} / {inv.max_uses} {exhausted ? "(used up)" : "used"}
+                  </span>
+                  {inv.note && <span style={{ fontSize: 12, color: "#666" }}>{inv.note}</span>}
+                  <span style={{ fontSize: 11, color: "#aaa", marginLeft: "auto" }}>{inv.created_at.slice(0, 10)}</span>
+                </div>
+                {inv.redemptions.length > 0 && (
+                  <ul style={{ marginTop: 8, paddingLeft: 16, fontSize: 12, color: "#666" }}>
+                    {inv.redemptions.map((r) => (
+                      <li key={`${r.user_id}-${r.redeemed_at}`}>
+                        {r.kind === "reset" ? "Reset" : "Signup"} by {r.email ?? "?"} · {r.redeemed_at.slice(0, 10)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

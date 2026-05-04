@@ -17,9 +17,10 @@ export async function POST(req: NextRequest) {
     await new Promise((r) => setTimeout(r, 400));
     return new Response("Forbidden", { status: 403 });
   }
-  let body: { note?: string };
+  let body: { note?: string; maxUses?: number };
   try { body = await req.json(); } catch { body = {}; }
   const note = body.note ? String(body.note).slice(0, 200) : null;
-  const invite = createInvite(note);
+  const maxUses = typeof body.maxUses === "number" && body.maxUses >= 1 ? body.maxUses : 1;
+  const invite = createInvite(note, maxUses);
   return Response.json({ invite }, { status: 201 });
 }

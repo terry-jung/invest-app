@@ -77,3 +77,16 @@ export function getUserById(id: string): User | null {
   ).get(id) as User | undefined;
   return row ?? null;
 }
+
+export function getUserByEmail(email: string): User | null {
+  const normalized = normalizeEmail(email);
+  const row = db().prepare(
+    "SELECT id, email, created_at, last_login_at FROM users WHERE email = ?"
+  ).get(normalized) as User | undefined;
+  return row ?? null;
+}
+
+export async function updatePassword(userId: string, newPassword: string): Promise<void> {
+  const passwordHash = await hash(newPassword, BCRYPT_COST);
+  db().prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+}

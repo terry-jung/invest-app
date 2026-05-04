@@ -30,6 +30,16 @@ export function db(): Database.Database {
   conn.pragma("journal_mode = WAL");
   conn.pragma("foreign_keys = ON");
   conn.exec(SCHEMA);
+  // Idempotent column adds for existing databases. SQLite errors if a
+  // column already exists; we swallow that case so this is safe to run
+  // every boot. Anything else re-throws.
+  for (const stmt of MIGRATIONS) {
+    try { conn.exec(stmt); }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/duplicate column name/i.test(msg)) throw e;
+    }
+  }
   _db = conn;
   return conn;
 }
@@ -49,7 +59,27 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   note TEXT,
   created_at TEXT NOT NULL,
   redeemed_at TEXT,
-  redeemed_by TEXT REFERENCES users(id) ON DELETE SET NULL
+  redeemed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  max_uses INTEGER NOT NULL DEFAULT 1,
+  uses INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_invite_codes_redeemed ON invite_codes(redeemed_at);
+
+CREATE TABLE IF NOT EXISTS invite_redemptions (
+  code TEXT NOT NULL REFERENCES invite_codes(code) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,           -- 'signup' | 'reset'
+  redeemed_at TEXT NOT NULL,
+  PRIMARY KEY (code, user_id, redeemed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_invite_redemptions_user ON invite_redemptions(user_id);
 `;
+
+// Adds for tables that existed before max_uses/uses were introduced.
+// Runs every boot; "duplicate column" is swallowed.
+const MIGRATIONS = [
+  `ALTER TABLE invite_codes ADD COLUMN max_uses INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE invite_codes ADD COLUMN uses INTEGER NOT NULL DEFAULT 0`,
+  // Backfill: any pre-existing redeemed code counts as 1 use.
+  `UPDATE invite_codes SET uses = 1 WHERE redeemed_at IS NOT NULL AND uses = 0`,
+];

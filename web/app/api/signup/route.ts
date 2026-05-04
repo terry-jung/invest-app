@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   // attribute it to. If redemption fails (race: two signups raced for the
   // same code), the second user is created but uninvited — we surface
   // this clearly so the admin can clean up if needed.
-  if (!redeemInvite(inviteCode, user.id)) {
+  if (!redeemInvite(inviteCode, user.id, "signup")) {
     return Response.json({ error: "Invite was claimed by someone else just now. Try a different code." }, { status: 409 });
   }
 
