@@ -1399,11 +1399,11 @@ export default function Page() {
           aria-label="Brainstorm"
           onClick={() => setView("hunter")}
         >
-          {/* Lightbulb icon */}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+          {/* Lightbulb icon — Lucide-style, reads cleanly at small size. */}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" />
             <path d="M9 18h6" />
-            <path d="M10 21h4" />
-            <path d="M12 3a6 6 0 0 0-4 10.5c.7.7 1.2 1.6 1.4 2.5h5.2c.2-.9.7-1.8 1.4-2.5A6 6 0 0 0 12 3z" />
+            <path d="M10 22h4" />
           </svg>
           <span>Brainstorm</span>
         </button>
@@ -1426,9 +1426,11 @@ export default function Page() {
           aria-label="Track"
           onClick={() => setView("saved")}
         >
-          {/* Bookmark icon */}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          {/* Activity / pulse-line icon — reads as "monitor over time",
+              the right semantic for the Track tab now that it isn't
+              just a bookmarks list. */}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
           <span>Track{totalTickers > 0 && <span className="nav-count">· {totalTickers}</span>}</span>
         </button>
