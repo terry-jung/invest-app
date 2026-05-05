@@ -162,6 +162,19 @@ export default function Page() {
   // than 90 days OR no parseable zones.
   type SavedFilter = null | "buy" | "hold" | "trim" | "stale";
   const [savedFilter, setSavedFilter] = useState<SavedFilter>(null);
+  // Log-trade sheet — opened from the pen icon next to a card's verdict.
+  // Context carries the ticker + zones so the sheet can pre-fill and
+  // grade entry vs. the analysis's recommended buy/trim levels.
+  type LogTradeCtx = {
+    ticker: string;
+    name: string;
+    analysisId: string | null;
+    defaultAction: "buy" | "trim" | "sell";
+    buyMax: number | null;
+    trimMin: number | null;
+    livePrice: number | null;
+  };
+  const [logTradeCtx, setLogTradeCtx] = useState<LogTradeCtx | null>(null);
   // Q&A buffer for the saved-detail panel. Ephemeral — cleared when the
   // user closes the detail or opens a different saved analysis.
   const [savedQA, setSavedQA] = useState<QAMessage[]>([]);
@@ -1278,6 +1291,15 @@ export default function Page() {
           onToggleStar={toggleStar}
           filter={savedFilter}
           setFilter={setSavedFilter}
+          onLogTrade={(ctx) => setLogTradeCtx(ctx)}
+        />
+      )}
+
+      {logTradeCtx && (
+        <LogTradeSheet
+          ctx={logTradeCtx}
+          onClose={() => setLogTradeCtx(null)}
+          onSaved={() => setLogTradeCtx(null)}
         />
       )}
 
@@ -2068,6 +2090,211 @@ function Cell({ label, value }: { label: string; value: string }) {
   );
 }
 
+/* =============== LOG-TRADE SHEET =============== */
+/**
+ * Bottom sheet for logging an actual trade. Opens from the pen icon
+ * next to a ticker's verdict on the Saved tab. Pre-fills ticker,
+ * smart-defaults the action, surfaces the analysis's buy/trim zones
+ * for live "vs. recommended" feedback as the user types a price.
+ *
+ * On Save it POSTs to /api/trades; on success the parent's onSaved
+ * fires and the sheet closes. The trade itself isn't displayed yet
+ * on the card (that's the next phase — placement of logged-action
+ * surface).
+ */
+function LogTradeSheet({
+  ctx, onClose, onSaved,
+}: {
+  ctx: {
+    ticker: string;
+    name: string;
+    analysisId: string | null;
+    defaultAction: "buy" | "trim" | "sell";
+    buyMax: number | null;
+    trimMin: number | null;
+    livePrice: number | null;
+  };
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [action, setAction] = useState<"buy" | "trim" | "sell">(ctx.defaultAction);
+  const [tradeDate, setTradeDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [price, setPrice] = useState("");
+  const [shares, setShares] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Esc to close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const priceNum = parseFloat(price.replace(/[^0-9.]/g, ""));
+  const sharesNum = parseFloat(shares.replace(/[^0-9.]/g, ""));
+  const canSave = !busy && Number.isFinite(priceNum) && priceNum > 0
+                       && Number.isFinite(sharesNum) && sharesNum > 0;
+
+  // Live "vs. recommended" feedback — only meaningful when zones exist.
+  let vs: { kind: "ok" | "warn"; text: string } | null = null;
+  if (Number.isFinite(priceNum) && ctx.buyMax != null && ctx.trimMin != null) {
+    if (action === "buy") {
+      if (priceNum <= ctx.buyMax) vs = { kind: "ok", text: "✓ inside buy zone — disciplined entry" };
+      else if (priceNum <= ctx.trimMin) vs = { kind: "warn", text: "↗ above buy zone — paying up vs. thesis" };
+      else vs = { kind: "warn", text: "⚠ above trim zone — system would not initiate here" };
+    } else if (action === "trim") {
+      if (priceNum >= ctx.trimMin) vs = { kind: "ok", text: "✓ inside trim zone — disciplined exit" };
+      else vs = { kind: "warn", text: "↘ below trim zone — early exit vs. thesis" };
+    }
+  }
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/trades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          ticker: ctx.ticker,
+          action,
+          trade_date: tradeDate,
+          price: priceNum,
+          shares: sharesNum,
+          notes: notes.trim() || null,
+          analysis_id: ctx.analysisId,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error ?? `Failed (${res.status})`);
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function fmtZone(n: number): string {
+    return n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : n.toFixed(2);
+  }
+
+  return (
+    <div className="log-sheet-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="log-sheet" role="dialog" aria-modal="true">
+        <div className="log-sheet-handle" />
+        <div className="log-sheet-head">
+          <h2>Log a trade</h2>
+          <button className="log-sheet-close" aria-label="Close" onClick={onClose}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="log-sheet-body">
+          {/* Action segmented */}
+          <div className="log-action-seg" role="tablist">
+            {(["buy","trim","sell"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                className={`log-action-${a}${action === a ? " active" : ""}`}
+                onClick={() => setAction(a)}
+              >
+                {a.charAt(0).toUpperCase() + a.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Ticker chip */}
+          <div className="log-field">
+            <label>Ticker</label>
+            <div className="log-ticker-chip">
+              <div>
+                <span className="sym">{ctx.ticker}</span>
+                <span className="nm">{ctx.name}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Context — only when we have parsed zones */}
+          {ctx.buyMax != null && ctx.trimMin != null && (
+            <div className="log-context">
+              <div className="head">From your {ctx.ticker} analysis</div>
+              <div className="body">
+                Buy &lt;<b>${fmtZone(ctx.buyMax)}</b> · Trim &gt;<b>${fmtZone(ctx.trimMin)}</b>
+                {ctx.livePrice != null && <> · Now <b>${ctx.livePrice.toFixed(2)}</b></>}
+              </div>
+            </div>
+          )}
+
+          {/* Date */}
+          <div className="log-field">
+            <label>Date</label>
+            <input type="date" value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} />
+          </div>
+
+          {/* Price + Shares */}
+          <div className="log-field-row">
+            <div className="log-field">
+              <label>Price per share</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="$0.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+              {ctx.livePrice != null && (
+                <div className="log-live-helper">
+                  now <b>${ctx.livePrice.toFixed(2)}</b>
+                  <button type="button" className="log-use-live" onClick={() => setPrice(ctx.livePrice!.toFixed(2))}>
+                    use live
+                  </button>
+                </div>
+              )}
+              {vs && <div className={`log-vs ${vs.kind}`}>{vs.text}</div>}
+            </div>
+            <div className="log-field">
+              <label>Shares</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0"
+                value={shares}
+                onChange={(e) => setShares(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="log-field">
+            <label>Notes (optional)</label>
+            <textarea
+              placeholder="Why now? What's the thesis check?"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          {err && <div className="log-error">{err}</div>}
+        </div>
+
+        <div className="log-save-bar">
+          <button type="button" className="log-save-btn" disabled={!canSave} onClick={save}>
+            {busy ? "Saving…" : "Save trade"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* =============== BYOK MODAL =============== */
 function BYOKModal({
   userApiKey, forced, trialsLeft, trialLimit, onClose, onSave, onClear,
@@ -2673,6 +2900,15 @@ function SavedView(props: {
   onToggleStar: (ticker: string, name?: string) => void;
   filter: null | "buy" | "hold" | "trim" | "stale";
   setFilter: (f: null | "buy" | "hold" | "trim" | "stale") => void;
+  onLogTrade: (ctx: {
+    ticker: string;
+    name: string;
+    analysisId: string | null;
+    defaultAction: "buy" | "trim" | "sell";
+    buyMax: number | null;
+    trimMin: number | null;
+    livePrice: number | null;
+  }) => void;
 }) {
   const {
     grouped, totalTickers, expandableCount, liveQuotes,
@@ -2680,7 +2916,7 @@ function SavedView(props: {
     confirmRowId, setConfirmRowId, confirmTicker, setConfirmTicker,
     removingId, removingTicker,
     onDeleteAnalysis, onDeleteTicker, onOpen, onPickTicker, onToggleStar,
-    filter, setFilter,
+    filter, setFilter, onLogTrade,
   } = props;
 
   // Compute the zone-status for each ticker group (for filter chips
@@ -2892,6 +3128,29 @@ function SavedView(props: {
                     <span className="zone-verdict-text">
                       {status === "buy" ? "Buy" : status === "trim" ? "Trim" : "Hold"}
                     </span>
+                    <button
+                      type="button"
+                      className="log-trade-btn"
+                      title={`Log a trade for ${g.ticker}`}
+                      aria-label={`Log a trade for ${g.ticker}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLogTrade({
+                          ticker: g.ticker,
+                          name: g.name,
+                          analysisId: latest.id,
+                          defaultAction: status === "trim" ? "trim" : "buy",
+                          buyMax: z.buyMax,
+                          trimMin: z.trimMin,
+                          livePrice: havePrice ? live!.price : null,
+                        });
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               );

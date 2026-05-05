@@ -100,6 +100,21 @@ CREATE TABLE IF NOT EXISTS invite_redemptions (
   PRIMARY KEY (code, user_id, redeemed_at)
 );
 CREATE INDEX IF NOT EXISTS idx_invite_redemptions_user ON invite_redemptions(user_id);
+
+CREATE TABLE IF NOT EXISTS trades (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ticker TEXT NOT NULL,             -- normalized uppercase
+  action TEXT NOT NULL,             -- 'buy' | 'trim' | 'sell'
+  trade_date TEXT NOT NULL,         -- YYYY-MM-DD (the date the trade happened)
+  price REAL NOT NULL,              -- per-share price
+  shares REAL NOT NULL,
+  notes TEXT,
+  analysis_id TEXT,                 -- optional FK to the saved analysis JSON; not enforced
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trades_user_ticker ON trades(user_id, ticker);
+CREATE INDEX IF NOT EXISTS idx_trades_user_date ON trades(user_id, trade_date);
 `;
 
 // Adds for tables that existed before max_uses/uses were introduced.

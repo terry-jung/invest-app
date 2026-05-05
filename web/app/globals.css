@@ -1808,3 +1808,289 @@ input, button {
   font-size: 16px;
   line-height: 0;
 }
+
+/* ===========================================================
+ * Log-trade entry point + bottom sheet
+ *
+ * Pen icon sits inline in the verdict row next to BUY / HOLD / TRIM.
+ * Tap → slides up a full-height bottom sheet with the trade form.
+ * =========================================================== */
+
+.log-trade-btn {
+  margin-left: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  color: var(--color-muted-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  padding: 0;
+}
+.log-trade-btn:hover {
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+  background: var(--color-panel-2);
+}
+.log-trade-btn svg { width: 14px; height: 14px; }
+
+/* Backdrop + sheet */
+.log-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+}
+.log-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 92vh;
+  background: var(--color-panel);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.18);
+  display: flex;
+  flex-direction: column;
+  animation: log-sheet-up 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes log-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.log-sheet-handle {
+  width: 38px;
+  height: 4px;
+  background: var(--color-line-2);
+  border-radius: 2px;
+  margin: 8px auto 0;
+  flex-shrink: 0;
+}
+.log-sheet-head {
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-line);
+  flex-shrink: 0;
+}
+.log-sheet-head h2 {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.log-sheet-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line);
+  color: var(--color-ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.log-sheet-close:hover { background: #ececef; }
+.log-sheet-close svg { width: 16px; height: 16px; }
+
+.log-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+}
+
+/* Action segmented control */
+.log-action-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 18px;
+}
+.log-action-seg button {
+  background: none;
+  border: none;
+  padding: 10px 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: 7px;
+  font-family: var(--font-sans);
+  transition: background 0.15s, color 0.15s;
+}
+.log-action-seg button.log-action-buy.active   { background: var(--color-pos);     color: #fff; }
+.log-action-seg button.log-action-trim.active  { background: var(--color-accent-2);color: #fff; }
+.log-action-seg button.log-action-sell.active  { background: var(--color-neg);     color: #fff; }
+
+/* Form fields */
+.log-field { margin-bottom: 16px; }
+.log-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--color-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.log-field input,
+.log-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  font-size: 16px;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  background: var(--color-panel);
+  color: var(--color-ink);
+}
+.log-field input:focus,
+.log-field textarea:focus {
+  outline: none;
+  border-color: var(--color-accent-2);
+}
+.log-field textarea {
+  resize: none;
+  min-height: 56px;
+  font-size: 14px;
+}
+
+.log-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Locked-ticker chip */
+.log-ticker-chip {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--color-panel-2);
+}
+.log-ticker-chip .sym {
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.005em;
+}
+.log-ticker-chip .nm {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-left: 8px;
+}
+
+/* Context card */
+.log-context {
+  background: rgba(30,64,175,0.04);
+  border: 1px solid rgba(30,64,175,0.18);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+.log-context .head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent-2);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.log-context .body {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.log-context .body b { font-weight: 600; }
+
+/* Live-price helper line under price field */
+.log-live-helper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+.log-live-helper b {
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+.log-use-live {
+  background: none;
+  border: none;
+  color: var(--color-accent-2);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0;
+}
+
+/* Vs-recommended feedback line */
+.log-vs {
+  margin-top: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+}
+.log-vs.ok   { color: var(--color-pos); }
+.log-vs.warn { color: var(--color-amb); }
+
+.log-error {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(185,28,28,0.06);
+  border: 1px solid rgba(185,28,28,0.25);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--color-neg);
+}
+
+/* Bottom save bar */
+.log-save-bar {
+  flex-shrink: 0;
+  padding: 12px 20px 18px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-panel);
+}
+.log-save-btn {
+  width: 100%;
+  padding: 16px 20px;
+  border-radius: 12px;
+  background: var(--color-ink);
+  color: #fff;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: background 0.12s;
+}
+.log-save-btn:disabled {
+  background: var(--color-line-2);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+.log-save-btn:not(:disabled):hover { background: #000; }
