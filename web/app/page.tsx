@@ -1397,14 +1397,14 @@ export default function Page() {
         <button
           className="nav-tab"
           aria-current={view === "saved" ? "true" : "false"}
-          aria-label="Saved"
+          aria-label="Track"
           onClick={() => setView("saved")}
         >
           {/* Bookmark icon */}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-          <span>Saved{totalTickers > 0 && <span className="nav-count">· {totalTickers}</span>}</span>
+          <span>Track{totalTickers > 0 && <span className="nav-count">· {totalTickers}</span>}</span>
         </button>
         <button
           className="nav-tab"
@@ -2951,8 +2951,8 @@ function SavedView(props: {
   if (grouped.length === 0) {
     return (
       <div className="saved-head" style={{ marginTop: 32 }}>
-        <h2>Saved</h2>
-        <p className="count">Nothing saved yet — bookmark a ticker from the live-quote chip or a Brainstorm card, or save a full analysis from the bottom of any report.</p>
+        <h2>Track</h2>
+        <p className="count">Nothing tracked yet — bookmark a ticker from the live-quote chip or a Brainstorm card, or save a full analysis from the bottom of any report.</p>
       </div>
     );
   }
@@ -2964,7 +2964,7 @@ function SavedView(props: {
       <div className="saved-head">
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
           <div>
-            <h2>Saved</h2>
+            <h2>Track</h2>
             <p className="count">
               <b>{totalTickers}</b> {totalTickers === 1 ? "ticker" : "tickers"}
               {totalAnalyses > 0 && <> · <b>{totalAnalyses}</b> {totalAnalyses === 1 ? "analysis" : "analyses"}</>}
