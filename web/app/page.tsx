@@ -3392,7 +3392,11 @@ function TradeRow({ t }: { t: TradeWithStats }) {
   const dateMD = t.trade_date.length >= 10
     ? `${t.trade_date.slice(5,7)}/${t.trade_date.slice(8,10)}`
     : t.trade_date;
-  const verbCap = t.action.charAt(0).toUpperCase() + t.action.slice(1);
+  // Action verb intentionally not rendered in the header — the body
+  // copy ("trimmed inside trim zone" / "entered inside buy zone")
+  // already conveys the action, and a header verb conflicts visually
+  // with the analysis's verdict pill on the Analyses tab.
+  // const verbCap = t.action.charAt(0).toUpperCase() + t.action.slice(1);
   // Money line: show realized for closing trades, unrealized for buys still held.
   const isBuy = t.action === "buy";
   const stillHeld = isBuy && (t.sharesStillHeld ?? 0) > 1e-6;
@@ -3413,7 +3417,7 @@ function TradeRow({ t }: { t: TradeWithStats }) {
     <div className={`trade-row ${cls}`}>
       <div className="trade-row1">
         <span className="trade-when">{dateMD}{heldNote ? ` · ${heldNote}` : ""}</span>
-        <span className="trade-action"><span className="sym">{t.ticker}</span> <span className="verb">{verbCap}</span></span>
+        <span className="trade-action"><span className="sym">{t.ticker}</span></span>
       </div>
       <div className="trade-money">
         {fmt2(t.shares)} sh @ <b>${fmt2(t.price)}</b>
