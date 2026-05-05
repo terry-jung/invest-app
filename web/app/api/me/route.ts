@@ -9,5 +9,7 @@ export async function GET(req: NextRequest) {
   if (!userId) return Response.json({ user: null });
   const user = getUserById(userId);
   if (!user) return Response.json({ user: null });
-  return Response.json({ user: { id: user.id, email: user.email } });
+  const ownerEmail = process.env.OWNER_EMAIL?.trim().toLowerCase();
+  const isOwner = !!ownerEmail && user.email === ownerEmail;
+  return Response.json({ user: { id: user.id, email: user.email, isOwner } });
 }

@@ -7,6 +7,7 @@ import { parseReport, pillClass, parseThresholds, parsePriceValue, type ParsedRe
 import { buildRenderBlocks, sevClass, macroBucket, type RenderBlock } from "@/lib/sections";
 import type { SavedAnalysis } from "@/lib/saved";
 import type { Quote } from "@/lib/quote";
+import { parseRanges, statusFor, markerPos, isStale, type ZoneStatus } from "@/lib/zones";
 
 type RunState = "idle" | "running" | "done" | "error";
 type View = "hunter" | "run" | "saved" | "account";
@@ -156,6 +157,11 @@ export default function Page() {
 
   // ---------- saved-view-mode (loaded saved analysis) ----------
   const [savedMode, setSavedMode] = useState<SavedAnalysis | null>(null);
+  // Saved-list filter chip selection. `null` = All; "buy"/"hold"/"trim" =
+  // current zone status of latest analysis; "stale" = analysis older
+  // than 90 days OR no parseable zones.
+  type SavedFilter = null | "buy" | "hold" | "trim" | "stale";
+  const [savedFilter, setSavedFilter] = useState<SavedFilter>(null);
   // Q&A buffer for the saved-detail panel. Ephemeral — cleared when the
   // user closes the detail or opens a different saved analysis.
   const [savedQA, setSavedQA] = useState<QAMessage[]>([]);
@@ -244,12 +250,13 @@ export default function Page() {
   const [byokOpen, setByokOpen] = useState(false);
   const [byokForced, setByokForced] = useState(false);
   // Authenticated user, fetched from /api/me on mount and updated after
-  // sign in / sign out. `user === null` means signed out (which gates
-  // saved-analyses sync). `ownerMode` is just an alias kept for legacy
-  // call sites that still treat "signed in" as "trial bypass."
-  type AuthedUser = { id: string; email: string };
+  // sign in / sign out. `user === null` means signed out (gates
+  // saved-analyses sync). `ownerMode` is the trial-bypass gate — only
+  // the owner (email matches OWNER_EMAIL on the server) gets unlimited;
+  // every other signed-in user is on the same 3-trial cap as anonymous.
+  type AuthedUser = { id: string; email: string; isOwner?: boolean };
   const [user, setUser] = useState<AuthedUser | null>(null);
-  const ownerMode = !!user;
+  const ownerMode = user?.isOwner === true;
   const [authOpen, setAuthOpen] = useState(false);
   const ownerModeRef = useRef(false);
   useEffect(() => { ownerModeRef.current = ownerMode; }, [ownerMode]);
@@ -559,15 +566,33 @@ export default function Page() {
   useEffect(() => {
     if (view !== "saved" || !user) return;
     loadSaved();
-    // Fetch live quotes for all tickers
     const tickers = Array.from(new Set(saved.map((s) => s.ticker)));
-    Promise.all(tickers.map(async (t) => {
-      try {
-        const res = await fetch(`/api/quote?ticker=${encodeURIComponent(t)}`);
-        if (!res.ok) return [t, null] as [string, Quote | null];
-        return [t, (await res.json()) as Quote] as [string, Quote | null];
-      } catch { return [t, null] as [string, Quote | null]; }
-    })).then((rows) => setLiveQuotes(Object.fromEntries(rows)));
+    // Fetcher pulled out so we can call it from multiple triggers
+    // below (initial load, polling, tab-visibility regain). Each call
+    // hits /api/quote once per ticker and replaces the whole map.
+    const refresh = () => {
+      Promise.all(tickers.map(async (t) => {
+        try {
+          const res = await fetch(`/api/quote?ticker=${encodeURIComponent(t)}`);
+          if (!res.ok) return [t, null] as [string, Quote | null];
+          return [t, (await res.json()) as Quote] as [string, Quote | null];
+        } catch { return [t, null] as [string, Quote | null]; }
+      })).then((rows) => setLiveQuotes(Object.fromEntries(rows)));
+    };
+    refresh();
+    // Poll every 60s, but only while the tab is actually visible —
+    // no point burning quote calls in a backgrounded tab.
+    const id = window.setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 60_000);
+    // Also refresh immediately when the tab regains focus (user
+    // alt-tabs back) so the marker isn't visibly stale.
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [view, loadSaved, saved.length]);
 
   // ---------- run analysis ----------
@@ -1251,6 +1276,8 @@ export default function Page() {
           onOpen={openSaved}
           onPickTicker={(t) => { setTicker(t); setView("run"); }}
           onToggleStar={toggleStar}
+          filter={savedFilter}
+          setFilter={setSavedFilter}
         />
       )}
 
@@ -1301,7 +1328,18 @@ export default function Page() {
       {authOpen && (
         <AuthModal
           onClose={() => setAuthOpen(false)}
-          onSuccess={(u) => { setUser(u); setAuthOpen(false); }}
+          onSuccess={(u) => {
+            // Login/signup responses don't include isOwner — refetch /api/me
+            // so ownerMode reflects OWNER_EMAIL match without a page reload.
+            setUser(u);
+            setAuthOpen(false);
+            fetch("/api/me", { credentials: "same-origin" })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((d: { user?: AuthedUser | null } | null) => {
+                if (d?.user) setUser(d.user);
+              })
+              .catch(() => { /* keep optimistic user */ });
+          }}
         />
       )}
 
@@ -2633,6 +2671,8 @@ function SavedView(props: {
   onOpen: (item: SavedAnalysis) => void;
   onPickTicker: (ticker: string) => void;
   onToggleStar: (ticker: string, name?: string) => void;
+  filter: null | "buy" | "hold" | "trim" | "stale";
+  setFilter: (f: null | "buy" | "hold" | "trim" | "stale") => void;
 }) {
   const {
     grouped, totalTickers, expandableCount, liveQuotes,
@@ -2640,7 +2680,33 @@ function SavedView(props: {
     confirmRowId, setConfirmRowId, confirmTicker, setConfirmTicker,
     removingId, removingTicker,
     onDeleteAnalysis, onDeleteTicker, onOpen, onPickTicker, onToggleStar,
+    filter, setFilter,
   } = props;
+
+  // Compute the zone-status for each ticker group (for filter chips
+  // + per-card rendering). "stale" wins over zone status when the
+  // latest analysis is too old, or when its rangesLine can't be parsed.
+  type Status = "buy" | "hold" | "trim" | "stale" | "none";
+  const groupStatus = (g: SavedGroup): Status => {
+    const latest = g.analyses[0];
+    if (!latest) return "none"; // starred-only with no analyses
+    if (isStale(latest.savedAt)) return "stale";
+    const z = parseRanges(latest.rangesLine);
+    if (!z) return "stale"; // unparseable zones -> treat as stale (re-run)
+    const live = liveQuotes[g.ticker];
+    if (!live || !Number.isFinite(live.price)) return "hold"; // no quote yet -> hold
+    return statusFor(live.price, z);
+  };
+  const statuses = grouped.map(groupStatus);
+  const counts = {
+    buy: statuses.filter((s) => s === "buy").length,
+    hold: statuses.filter((s) => s === "hold").length,
+    trim: statuses.filter((s) => s === "trim").length,
+    stale: statuses.filter((s) => s === "stale").length,
+  };
+  const visibleIdx = grouped
+    .map((_, i) => i)
+    .filter((i) => filter == null || statuses[i] === filter);
 
   if (grouped.length === 0) {
     return (
@@ -2676,7 +2742,46 @@ function SavedView(props: {
         </div>
       </div>
 
-      {grouped.map((g) => {
+      {/* Filter chips — narrow the visible groups by current zone status. */}
+      <div className="saved-filters" role="tablist" aria-label="Filter saved analyses">
+        <button
+          type="button"
+          className={`saved-chip${filter == null ? " active" : ""}`}
+          onClick={() => setFilter(null)}
+        >
+          All · {grouped.length}
+        </button>
+        {(["buy","hold","trim","stale"] as const).map((s) => {
+          const labels: Record<typeof s, string> = {
+            buy: "In buy zone",
+            hold: "In hold zone",
+            trim: "In trim zone",
+            stale: "Re-run",
+          };
+          const n = counts[s];
+          if (n === 0) return null;
+          return (
+            <button
+              type="button"
+              key={s}
+              className={`saved-chip${filter === s ? " active" : ""}`}
+              onClick={() => setFilter(filter === s ? null : s)}
+            >
+              {labels[s]} · {n}
+            </button>
+          );
+        })}
+      </div>
+
+      {visibleIdx.length === 0 && (
+        <div className="saved-head" style={{ marginTop: 12 }}>
+          <p className="count">No saved analyses match this filter.</p>
+        </div>
+      )}
+
+      {visibleIdx.map((idx) => {
+        const g = grouped[idx];
+        const status = statuses[idx];
         const isOpen = openTickers.has(g.ticker);
         const isConfirmTicker = confirmTicker === g.ticker;
         const isRemovingTicker = removingTicker === g.ticker;
@@ -2741,6 +2846,56 @@ function SavedView(props: {
                 </div>
               )}
             </div>
+
+            {/* Zone bar (or stale CTA) for the latest saved analysis. */}
+            {hasAnalyses && !isConfirmTicker && (() => {
+              const latest = g.analyses[0];
+              const live = liveQuotes[g.ticker];
+              const z = parseRanges(latest.rangesLine);
+              const stale = isStale(latest.savedAt);
+              if (stale || !z) {
+                return (
+                  <div
+                    className="zone-rerun"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); onPickTicker(g.ticker); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onPickTicker(g.ticker); } }}
+                  >
+                    <div className="copy">
+                      <b>Analysis too old.</b> Re-run analysis for a current read.
+                    </div>
+                    <span className="arrow" aria-hidden>→</span>
+                  </div>
+                );
+              }
+              const havePrice = !!live && Number.isFinite(live.price);
+              const pos = havePrice ? markerPos(live.price, z) : null;
+              const status: ZoneStatus = havePrice ? statusFor(live.price, z) : "hold";
+              const fmt = (n: number) => n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : n.toFixed(2);
+              return (
+                <div className="zone-block">
+                  <div className="zone-bar" aria-label={`Price zones for ${g.ticker}`}>
+                    <div className="zone-labels">
+                      <span>Buy &lt;${fmt(z.buyMax)}</span>
+                      <span className="mid">Hold</span>
+                      <span>Trim &gt;${fmt(z.trimMin)}</span>
+                    </div>
+                    {pos != null && (
+                      <div className="zone-marker" style={{ left: `${pos}%` }}>
+                        <div className="zone-marker-tag">${fmt(live!.price)}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="zone-verdict">
+                    <span className={`zone-dot zone-dot-${status}`} aria-hidden />
+                    <span className="zone-verdict-text">
+                      {status === "buy" ? "Buy" : status === "trim" ? "Trim" : "Hold"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {isOpen && hasAnalyses && (
               <div className="ticker-list">

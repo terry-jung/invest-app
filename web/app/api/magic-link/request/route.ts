@@ -22,11 +22,18 @@ export async function POST(req: NextRequest) {
 
   const user = getUserByEmail(email);
 
-  // Build the absolute link from the request, so this works on Railway,
-  // localhost, preview deployments — without an explicit APP_URL var.
-  const proto = req.headers.get("x-forwarded-proto") ?? (req.url.startsWith("https") ? "https" : "http");
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
-  const origin = `${proto}://${host}`;
+  // Prefer an explicit APP_URL env var (set this on Railway to your
+  // public origin, e.g. https://invest-app.up.railway.app). Fall back
+  // to inferring from x-forwarded-* / host headers for local dev. The
+  // header path is unreliable behind some proxies that pass through an
+  // internal host like "localhost:8000".
+  const appUrl = process.env.APP_URL?.trim().replace(/\/+$/, "");
+  let origin = appUrl ?? "";
+  if (!origin) {
+    const proto = req.headers.get("x-forwarded-proto") ?? (req.url.startsWith("https") ? "https" : "http");
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+    origin = `${proto}://${host}`;
+  }
 
   // Send the email only when the user actually exists. The response
   // shape is identical either way so callers can't tell.

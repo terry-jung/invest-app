@@ -13,6 +13,7 @@
 import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
 let _db: Database.Database | null = null;
 
@@ -40,8 +41,34 @@ export function db(): Database.Database {
       if (!/duplicate column name/i.test(msg)) throw e;
     }
   }
+  bootstrapOwnerUser(conn);
   _db = conn;
   return conn;
+}
+
+/**
+ * If OWNER_EMAIL is set and no user exists for it yet, create a shell
+ * user record. The owner can then sign in via magic link without ever
+ * dealing with an invite code or password — the password_hash is a
+ * non-bcrypt sentinel that bcrypt.compare() always rejects. If the
+ * owner wants to set a real password later, the forgot-password flow
+ * (with an invite code) will overwrite it.
+ */
+function bootstrapOwnerUser(conn: Database.Database) {
+  const raw = process.env.OWNER_EMAIL?.trim().toLowerCase();
+  if (!raw) return;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return;
+  const existing = conn.prepare("SELECT id FROM users WHERE email = ?").get(raw);
+  if (existing) return;
+
+  const id = randomUUID();
+  // Sentinel that bcrypt.compare() always rejects — magic-link-only.
+  const passwordHash = "MAGIC_LINK_ONLY_NO_PASSWORD_SET";
+  const createdAt = new Date().toISOString();
+  conn.prepare(
+    "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)"
+  ).run(id, raw, passwordHash, createdAt);
+  console.log(`[bootstrap] created shell owner user for ${raw}`);
 }
 
 const SCHEMA = `

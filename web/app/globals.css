@@ -1643,3 +1643,168 @@ input, button {
   color: var(--color-neg);
   background: rgba(185,28,28,0.04);
 }
+
+/* ===========================================================
+ * Saved-tab filter chips + zone bar
+ *
+ * Filter chips sit between the saved-head and the ticker groups.
+ * Zone bar lives inside each ticker-group, between the head and
+ * the (collapsible) ticker-list — it shows live price vs. the
+ * latest analysis's buy/hold/trim thresholds. Stale or
+ * unparseable-zones analyses fall back to a "re-run" CTA card.
+ * =========================================================== */
+
+.saved-filters {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0 14px;
+  margin: 0 -2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.saved-filters::-webkit-scrollbar { display: none; }
+.saved-chip {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted-2);
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.saved-chip:hover {
+  border-color: var(--color-line-2);
+  color: var(--color-ink);
+}
+.saved-chip.active {
+  background: var(--color-ink);
+  color: #fff;
+  border-color: var(--color-ink);
+}
+
+/* Zone bar block — sits between ticker-head and ticker-list. The
+   small top padding adds breathing room so the floating price tag
+   never collides with the head row above. */
+.zone-block {
+  padding: 22px 14px 10px;
+  background: var(--color-panel);
+  border-top: 1px solid var(--color-line);
+}
+.ticker-group[data-open="true"] .zone-block {
+  border-bottom: 1px solid var(--color-line);
+}
+.zone-bar {
+  position: relative;
+  height: 30px;
+  background: linear-gradient(90deg,
+    rgba(4,120,87,0.10) 0%,
+    rgba(4,120,87,0.10) 33.33%,
+    rgba(110,110,115,0.06) 33.33%,
+    rgba(110,110,115,0.06) 66.66%,
+    rgba(234,88,12,0.10) 66.66%,
+    rgba(234,88,12,0.10) 100%);
+  border-radius: 6px;
+  overflow: visible;
+}
+.zone-labels {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 10.5px;
+  color: var(--color-muted-2);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  font-weight: 500;
+}
+.zone-labels .mid { color: var(--color-muted); font-weight: 400; }
+.zone-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 36px;
+  background: var(--color-ink);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.9);
+}
+.zone-marker-tag {
+  position: absolute;
+  top: -19px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-ink);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.zone-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.zone-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.zone-dot-buy  { background: var(--color-pos); }
+.zone-dot-hold { background: var(--color-line-2); }
+.zone-dot-trim { background: var(--color-neg); }
+.zone-verdict-text {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Re-run CTA — replaces the zone bar when the analysis is stale
+   or its rangesLine can't be parsed. Tap pre-fills the ticker on
+   the Analyze tab. */
+.zone-rerun {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 14px;
+  padding: 12px 14px;
+  background: var(--color-panel-2);
+  border: 1px dashed var(--color-line-2);
+  border-radius: 10px;
+  color: var(--color-muted-2);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.zone-rerun:hover {
+  border-color: var(--color-ink);
+  background: #f3f3f5;
+}
+.zone-rerun .copy {
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.zone-rerun .copy b {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+.zone-rerun .arrow {
+  flex-shrink: 0;
+  color: var(--color-ink);
+  font-size: 16px;
+  line-height: 0;
+}
