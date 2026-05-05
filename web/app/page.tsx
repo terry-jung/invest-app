@@ -8,6 +8,8 @@ import { buildRenderBlocks, sevClass, macroBucket, type RenderBlock } from "@/li
 import type { SavedAnalysis } from "@/lib/saved";
 import type { Quote } from "@/lib/quote";
 import { parseRanges, statusFor, markerPos, isStale, type ZoneStatus } from "@/lib/zones";
+import type { Trade } from "@/lib/trades";
+import { computeTickerTrades, disciplineRate, type TradeWithStats } from "@/lib/trade-stats";
 
 type RunState = "idle" | "running" | "done" | "error";
 type View = "hunter" | "run" | "saved" | "account";
@@ -175,6 +177,20 @@ export default function Page() {
     livePrice: number | null;
   };
   const [logTradeCtx, setLogTradeCtx] = useState<LogTradeCtx | null>(null);
+  // All user-logged trades; fetched from /api/trades. Powers the
+  // Trades sub-tab and gets refetched after a successful save.
+  const [trades, setTrades] = useState<Trade[]>([]);
+  const loadTrades = useCallback(async () => {
+    try {
+      const res = await fetch("/api/trades", { credentials: "same-origin" });
+      if (!res.ok) { setTrades([]); return; }
+      const data = (await res.json()) as { items: Trade[] };
+      setTrades(data.items || []);
+    } catch { /* keep previous */ }
+  }, []);
+  // Sub-tab inside the Track tab: "analyses" (default) or "trades".
+  type TrackSubTab = "analyses" | "trades";
+  const [trackSubTab, setTrackSubTab] = useState<TrackSubTab>("analyses");
   // Q&A buffer for the saved-detail panel. Ephemeral — cleared when the
   // user closes the detail or opens a different saved analysis.
   const [savedQA, setSavedQA] = useState<QAMessage[]>([]);
@@ -575,6 +591,9 @@ export default function Page() {
   // Saved list is per-user and only meaningful once signed in. Avoid the
   // 401 noise from /api/saved when the user lands on the page logged out.
   useEffect(() => { if (user) loadSaved(); else { setSaved([]); setStarred({}); } }, [user, loadSaved]);
+
+  // Trades are also per-user. Fetch on sign-in; clear on sign-out.
+  useEffect(() => { if (user) loadTrades(); else setTrades([]); }, [user, loadTrades]);
 
   useEffect(() => {
     if (view !== "saved" || !user) return;
@@ -1292,6 +1311,9 @@ export default function Page() {
           filter={savedFilter}
           setFilter={setSavedFilter}
           onLogTrade={(ctx) => setLogTradeCtx(ctx)}
+          subTab={trackSubTab}
+          setSubTab={setTrackSubTab}
+          trades={trades}
         />
       )}
 
@@ -1299,7 +1321,11 @@ export default function Page() {
         <LogTradeSheet
           ctx={logTradeCtx}
           onClose={() => setLogTradeCtx(null)}
-          onSaved={() => setLogTradeCtx(null)}
+          onSaved={() => {
+            setLogTradeCtx(null);
+            // Pull fresh trades so the new row shows up in the Trades sub-tab.
+            void loadTrades();
+          }}
         />
       )}
 
@@ -2913,6 +2939,9 @@ function SavedView(props: {
     trimMin: number | null;
     livePrice: number | null;
   }) => void;
+  subTab: "analyses" | "trades";
+  setSubTab: (t: "analyses" | "trades") => void;
+  trades: Trade[];
 }) {
   const {
     grouped, totalTickers, expandableCount, liveQuotes,
@@ -2920,7 +2949,7 @@ function SavedView(props: {
     confirmRowId, setConfirmRowId, confirmTicker, setConfirmTicker,
     removingId, removingTicker,
     onDeleteAnalysis, onDeleteTicker, onOpen, onPickTicker, onToggleStar,
-    filter, setFilter, onLogTrade,
+    filter, setFilter, onLogTrade, subTab, setSubTab, trades,
   } = props;
 
   // Compute the zone-status for each ticker group (for filter chips
@@ -2982,6 +3011,29 @@ function SavedView(props: {
         </div>
       </div>
 
+      {/* Sub-tab toggle: Analyses (default) | Trades. The same Track tab
+          surfaces both lenses on the same data — no new bottom-nav. */}
+      <div className="track-subtabs" role="tablist" aria-label="Track view">
+        <button
+          type="button"
+          className={`track-subtab${subTab === "analyses" ? " active" : ""}`}
+          onClick={() => setSubTab("analyses")}
+        >
+          Analyses
+        </button>
+        <button
+          type="button"
+          className={`track-subtab${subTab === "trades" ? " active" : ""}`}
+          onClick={() => setSubTab("trades")}
+        >
+          Trades{trades.length > 0 && <span className="track-subtab-count"> · {trades.length}</span>}
+        </button>
+      </div>
+
+      {subTab === "trades" ? (
+        <TradesView trades={trades} grouped={grouped} liveQuotes={liveQuotes} />
+      ) : (
+      <>
       {/* Filter chips — narrow the visible groups by current zone status. */}
       <div className="saved-filters" role="tablist" aria-label="Filter saved analyses">
         <button
@@ -3229,7 +3281,159 @@ function SavedView(props: {
           </div>
         );
       })}
+      </>
+      )}
     </>
+  );
+}
+
+/* =============== TRADES VIEW =============== */
+/**
+ * Decision-discipline view inside the Track tab. Each logged trade is
+ * graded against the latest analysis's recommended buy/trim zones —
+ * "Followed", "Off", or "Broke" the recommendation. The aggregate
+ * discipline rate sits at the top.
+ *
+ * Performance numbers come from FIFO lot accounting (matches Fidelity /
+ * Schwab / Robinhood defaults — see lib/trade-stats.ts).
+ *
+ * This view answers the only question this app uniquely can: did your
+ * actions match the plan you committed to? Brokers know your P&L; only
+ * this app knows the recommendation you were supposed to follow.
+ */
+function TradesView({
+  trades, grouped, liveQuotes,
+}: {
+  trades: Trade[];
+  grouped: SavedGroup[];
+  liveQuotes: Record<string, Quote | null>;
+}) {
+  // Group trades by ticker, run FIFO + grading per ticker, then flatten
+  // back to one chronological list. We grade against the LATEST analysis
+  // for each ticker (older ones may have stale zones). If no analysis
+  // exists for a logged ticker, grade falls back to "untracked".
+  const enriched = useMemo(() => {
+    const byTicker = new Map<string, Trade[]>();
+    for (const t of trades) {
+      const arr = byTicker.get(t.ticker) ?? [];
+      arr.push(t);
+      byTicker.set(t.ticker, arr);
+    }
+    const all: TradeWithStats[] = [];
+    for (const [ticker, ts] of byTicker.entries()) {
+      const group = grouped.find((g) => g.ticker === ticker);
+      const latest = group?.analyses[0];
+      const zones = latest ? parseRanges(latest.rangesLine) : null;
+      const live = liveQuotes[ticker];
+      const currentPrice = (live && Number.isFinite(live.price)) ? live.price : null;
+      const { trades: rows } = computeTickerTrades(ts, zones, currentPrice);
+      all.push(...rows);
+    }
+    // Newest first
+    all.sort((a, b) => {
+      if (a.trade_date !== b.trade_date) return b.trade_date.localeCompare(a.trade_date);
+      return b.created_at.localeCompare(a.created_at);
+    });
+    return all;
+  }, [trades, grouped, liveQuotes]);
+
+  const discipline = disciplineRate(enriched);
+
+  if (enriched.length === 0) {
+    return (
+      <div className="trades-empty">
+        <h3>No trades yet</h3>
+        <p>Tap the pen icon next to any analysis&apos;s verdict on the Analyses tab to log a trade. Each trade gets graded against the recommended buy / trim zones.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="trades-purpose">
+        <h2>Did you follow the recommendation?</h2>
+        <p>Each trade scored against the analysis you logged it against. Disciplined entries inside the buy zone, early or late exits — all graded.</p>
+      </div>
+
+      {discipline && (
+        <div className="trades-discipline">
+          <div className="dlabel">Discipline</div>
+          <div className="dnum">
+            {discipline.followed}
+            <span className="dsub">of {discipline.total} trade{discipline.total === 1 ? "" : "s"}</span>
+            <span className="dpct">{discipline.pct}%</span>
+          </div>
+          <div className="ddesc">
+            {discipline.followed} trade{discipline.followed === 1 ? "" : "s"} matched the recommendation.{" "}
+            {discipline.total - discipline.followed > 0 && (
+              <>{discipline.total - discipline.followed} {discipline.total - discipline.followed === 1 ? "did not" : "did not"}.</>
+            )}
+          </div>
+        </div>
+      )}
+
+      <h3 className="trades-section-h">Trades · most recent first</h3>
+
+      <div className="trades-list">
+        {enriched.map((t) => <TradeRow key={t.id} t={t} />)}
+      </div>
+    </>
+  );
+}
+
+function TradeRow({ t }: { t: TradeWithStats }) {
+  const cls =
+    t.grade.kind === "ok" ? "ok"
+    : t.grade.kind === "broke" ? "broke"
+    : t.grade.kind === "warn" ? "warn"
+    : "untracked";
+  const dateMD = t.trade_date.length >= 10
+    ? `${t.trade_date.slice(5,7)}/${t.trade_date.slice(8,10)}`
+    : t.trade_date;
+  const verbCap = t.action.charAt(0).toUpperCase() + t.action.slice(1);
+  // Money line: show realized for closing trades, unrealized for buys still held.
+  const isBuy = t.action === "buy";
+  const stillHeld = isBuy && (t.sharesStillHeld ?? 0) > 1e-6;
+  const heldNote = isBuy
+    ? (stillHeld
+        ? `still holding${(t.sharesStillHeld! < t.shares - 1e-6) ? ` (${fmt2(t.sharesStillHeld!)} of ${fmt2(t.shares)})` : ""}`
+        : "fully sold")
+    : null;
+  const moneyLabel = !isBuy
+    ? "realized"
+    : (stillHeld ? "unrealized" : "realized");
+  const moneyValue = !isBuy
+    ? (t.realized ?? 0)
+    : (stillHeld ? (t.unrealized ?? 0) : 0);
+  const moneyClass = moneyValue > 0 ? "pos" : moneyValue < 0 ? "neg" : "muted";
+
+  return (
+    <div className={`trade-row ${cls}`}>
+      <div className="trade-row1">
+        <span className="trade-when">{dateMD}{heldNote ? ` · ${heldNote}` : ""}</span>
+        <span className="trade-action"><span className="sym">{t.ticker}</span> <span className="verb">{verbCap}</span></span>
+      </div>
+      <div className="trade-money">
+        {fmt2(t.shares)} sh @ <b>${fmt2(t.price)}</b>
+        {(t.grade.kind !== "untracked") && (
+          <>
+            {" · "}{moneyLabel} <b className={moneyClass === "pos" ? "pos" : moneyClass === "neg" ? "neg" : ""}>
+              {moneyValue >= 0 ? "+" : ""}${fmt2(Math.abs(moneyValue))}
+            </b>
+          </>
+        )}
+      </div>
+      <div className="trade-grade">
+        <span className={`gicon ${cls}`}>
+          {cls === "ok" ? "✓" : cls === "broke" ? "✕" : cls === "warn" ? "↗" : "?"}
+        </span>
+        <span className="gtext">
+          <span className={`gverdict ${cls}`}>{t.grade.verdict.split(" — ")[0]}</span>
+          {t.grade.verdict.includes(" — ") && <> — {t.grade.verdict.split(" — ").slice(1).join(" — ")}</>}
+          <div className="gplan">{t.grade.plan}</div>
+        </span>
+      </div>
+    </div>
   );
 }
 

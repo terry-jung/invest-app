@@ -2094,3 +2094,224 @@ input, button {
   cursor: not-allowed;
 }
 .log-save-btn:not(:disabled):hover { background: #000; }
+
+/* ===========================================================
+ * Track sub-tabs (Analyses | Trades) + Trades view
+ *
+ * Sub-tabs sit immediately under the saved-head, before the filter
+ * chips. Trades view is a focused decision-discipline journal —
+ * each logged trade graded against the analysis it came from.
+ * =========================================================== */
+
+.track-subtabs {
+  margin: 0 0 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  padding: 3px;
+}
+.track-subtab {
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-muted);
+  cursor: pointer;
+  border-radius: 9px;
+  transition: background 0.15s, color 0.15s;
+}
+.track-subtab:hover { color: var(--color-ink); }
+.track-subtab.active {
+  background: var(--color-ink);
+  color: #fff;
+  font-weight: 600;
+}
+.track-subtab-count { opacity: 0.75; font-weight: 500; }
+
+/* Trades-view hero: framing the page question. */
+.trades-purpose {
+  margin: 4px 0 14px;
+}
+.trades-purpose h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+  line-height: 1.15;
+}
+.trades-purpose p {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* Headline KPI: discipline rate. */
+.trades-discipline {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  padding: 18px 18px 16px;
+  margin-bottom: 18px;
+}
+.trades-discipline .dlabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.trades-discipline .dnum {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.trades-discipline .dsub {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.trades-discipline .dpct {
+  color: var(--color-pos);
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.trades-discipline .ddesc {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.trades-section-h {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-muted);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.trades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Per-trade row */
+.trade-row {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  border-left-width: 3px;
+}
+.trade-row.ok        { border-left-color: var(--color-pos); }
+.trade-row.warn      { border-left-color: var(--color-amb); }
+.trade-row.broke     { border-left-color: var(--color-neg); }
+.trade-row.untracked { border-left-color: var(--color-line-2); }
+
+.trade-row .trade-row1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.trade-row .trade-when {
+  font-size: 11px;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+.trade-row .trade-action {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.trade-row .trade-action .sym { font-weight: 700; }
+.trade-row .trade-action .verb { color: var(--color-muted-2); font-weight: 500; }
+
+.trade-row .trade-money {
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.trade-row .trade-money b { color: var(--color-ink); font-weight: 600; }
+.trade-row .trade-money b.pos { color: var(--color-pos); }
+.trade-row .trade-money b.neg { color: var(--color-neg); }
+
+.trade-row .trade-grade {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-line);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.trade-row .gicon {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.trade-row .gicon.ok        { background: var(--color-pos); }
+.trade-row .gicon.warn      { background: var(--color-amb); }
+.trade-row .gicon.broke     { background: var(--color-neg); }
+.trade-row .gicon.untracked { background: var(--color-line-2); color: var(--color-ink); }
+
+.trade-row .gtext {
+  color: var(--color-ink);
+}
+.trade-row .gverdict { font-weight: 600; }
+.trade-row .gverdict.ok    { color: var(--color-pos); }
+.trade-row .gverdict.warn  { color: var(--color-amb); }
+.trade-row .gverdict.broke { color: var(--color-neg); }
+.trade-row .gverdict.untracked { color: var(--color-muted-2); }
+.trade-row .gplan {
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+/* Empty state */
+.trades-empty {
+  padding: 48px 32px;
+  text-align: center;
+  color: var(--color-muted);
+}
+.trades-empty h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  color: var(--color-ink);
+}
+.trades-empty p {
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
