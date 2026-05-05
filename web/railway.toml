@@ -2,8 +2,10 @@
 #
 # Build: Nixpacks auto-detects Next.js → runs `npm install` + `npm run build`.
 # Deploy: starts a long-lived Node process via `npm start` (which runs
-# `next start` and listens on $PORT). Healthcheck hits `/` to gate the
-# new revision behind a real OK from the renderer.
+# `next start` and listens on $PORT). Healthcheck hits `/api/health`
+# (a public 200-OK route) to gate the new revision. We can't use `/`
+# because auth middleware redirects unauthenticated requests to /login,
+# which Railway's healthcheck bot counts as a failure.
 #
 # Persistent storage: a 1GB volume is mounted at /data. The Save flow
 # resolves SAVED_ANALYSES_DIR=/data/saved-analyses (set as a Railway env
@@ -14,7 +16,7 @@ builder = "NIXPACKS"
 
 [deploy]
 startCommand = "npm start"
-healthcheckPath = "/"
-healthcheckTimeout = 30
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
