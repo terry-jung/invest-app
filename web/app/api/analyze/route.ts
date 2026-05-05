@@ -16,7 +16,6 @@ type Evt =
   | { type: "error"; text: string };
 
 export async function POST(req: NextRequest) {
-  console.log("[analyze] POST received");
   let body: { ticker?: string };
   try {
     body = await req.json();
@@ -28,7 +27,6 @@ export async function POST(req: NextRequest) {
   if (!ticker || !TICKER_RE.test(ticker)) {
     return new Response("Invalid ticker", { status: 400 });
   }
-  console.log("[analyze] ticker validated:", ticker);
 
   // BYOK: per-request user-supplied API key takes precedence over the server
   // default. Setting process.env at request scope is fine for low concurrency
@@ -43,7 +41,6 @@ export async function POST(req: NextRequest) {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      console.log("[analyze] stream start() fired for", ticker);
       const encoder = new TextEncoder();
       // `canceled` flips when controller.enqueue() throws, which happens when
       // the client has closed the connection (Cancel button, page navigation).
@@ -241,7 +238,6 @@ QUALITY BAR
 - If the ticker is ambiguous, non-US, or the skill genuinely can't complete, output a short H1 + one paragraph explaining and stop.`;
 
         let sawAnyAssistantText = false;
-        console.log("[analyze] calling query() for", ticker, "model=", process.env.ANALYZE_MODEL || "opus", "cli=", process.env.CLAUDE_CODE_EXECUTABLE || "(default)");
 
         for await (const message of query({
           prompt,
@@ -267,7 +263,6 @@ QUALITY BAR
           },
         })) {
           if (canceled) break;
-          console.log("[analyze] msg type:", message.type);
           if (message.type === "system") {
             send({ type: "status", text: "Agent ready. Researching…" });
             continue;
