@@ -3357,7 +3357,7 @@ function TradesView({
 
       {discipline && (
         <div className="trades-discipline">
-          <div className="dlabel">Discipline</div>
+          <div className="dlabel">Follow through</div>
           <div className="dnum">
             {discipline.followed}
             <span className="dsub">of {discipline.total} trade{discipline.total === 1 ? "" : "s"}</span>
