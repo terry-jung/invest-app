@@ -1484,7 +1484,11 @@ function RunView(props: {
 
       <TickerChip
         state={chipState} quote={chipQuote} ticker={ticker}
-        starred={!!starred[(ticker || "").toUpperCase()]}
+        // Prefer the quote's ticker over the input-box value: the input
+        // can be cleared (or hold an old/different symbol) while the chip
+        // still displays the last successfully-loaded quote, and we want
+        // the bookmark fill to reflect the symbol shown, not the input.
+        starred={!!starred[(chipQuote?.ticker || ticker || "").toUpperCase()]}
         onToggleStar={onToggleStar}
       />
 
